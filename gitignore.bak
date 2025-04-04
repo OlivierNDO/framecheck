@@ -1,5 +1,5 @@
 # Backup files
-*.bak
+README.md.bak
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
