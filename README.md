@@ -5,25 +5,24 @@ Define expectations for your data, validate them cleanly, and surface friendly e
 
 ---
 
-## 📦 Installation
+## Installation
 
-```bash
-pip install framecheck
-```
+pip install coming soon
 
 ---
 
-## 🧠 Why framecheck?
+## Main Features
 
-- Designed for pandas users
-- Simple, fluent API
-- Supports error **or** warning-level assertions
-- Validates both column-level and DataFrame-level rules
-- No config files, decorators, or boilerplate
+- Designed for pandas users  
+- Simple, fluent API  
+- Supports error **or** warning-level assertions  
+- Validates both column-level and DataFrame-level rules  
+- No config files, decorators, or boilerplate  
+
 
 ---
 
-## 📚 Table of Contents
+## Table of Contents
 
 - [Getting Started](#getting-started)
 - [Core FrameCheck Features](#core-framecheck-features)
@@ -31,12 +30,6 @@ pip install framecheck
     - [warn_only](#warn_only)
     - [only_defined_columns](#only_defined_columns)
 - [License](#license)
-
----
-
-## Getting Started
-
-pip install coming soon
 
 ---
 
@@ -111,5 +104,8 @@ print(result.summary())
 ---
 
 ## License
-
 MIT
+
+<hr>
+
+[Go to Top](#main-features)
