@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "framecheck"
+version = "0.1.0"
+description = "Lightweight, readable, and extensible validation for pandas DataFrames."
+readme = "README.md"
+requires-python = ">=3.8"
+license = { text = "MIT" }
+authors = [
+    { name = "Nick Olivier", email = "olivier_n@alum.lynchburg.edu" }
+]
+dependencies = [
+    "pandas>=1.3"
+]
+
+[project.urls]
+Homepage = "https://github.com/OlivierNDO/framecheck"
+Documentation = "https://github.com/OlivierNDO/framecheck#readme"
+Issues = "https://github.com/OlivierNDO/framecheck/issues"
