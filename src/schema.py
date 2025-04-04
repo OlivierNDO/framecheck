@@ -10,26 +10,28 @@ class ColumnCheck:
         self.column_name = column_name
         self.raise_on_fail = raise_on_fail
 
-    def validate(self, series: pd.Series) -> list[str]:
+    def validate(self, series: pd.Series) -> dict:
         raise NotImplementedError("Subclasses should implement validate()")
         
         
 class ColumnExistsCheck(ColumnCheck):
-    def validate(self, series: pd.Series) -> list[str]:
-        # This should never be called — we intercept missing columns earlier
-        return []
+    def validate(self, series: pd.Series) -> dict:
+        return {"messages": [], "failing_indices": set()}
 
 
 class BoolColumnCheck(ColumnCheck):
-    def validate(self, series: pd.Series) -> list[str]:
-        errors = []
+    def validate(self, series: pd.Series) -> dict:
+        messages = []
         invalid_values = series[~series.isin([True, False]) & series.notna()]
+        failing_indices = set(invalid_values.index)
+
         if not invalid_values.empty:
             sample = list(invalid_values.unique()[:3])
-            errors.append(
+            messages.append(
                 f"Column '{self.column_name}' contains non-boolean values: {sample}."
             )
-        return errors
+
+        return {"messages": messages, "failing_indices": failing_indices}
 
 
 class DatetimeColumnCheck(ColumnCheck):
@@ -38,24 +40,34 @@ class DatetimeColumnCheck(ColumnCheck):
         self.min = pd.to_datetime(min) if min else None
         self.max = pd.to_datetime(max) if max else None
 
-    def validate(self, series: pd.Series) -> list[str]:
-        errors = []
+    def validate(self, series: pd.Series) -> dict:
+        messages = []
+        failing_indices = set()
+
         coerced = pd.to_datetime(series, errors='coerce')
-        invalid_values = series[coerced.isna() & series.notna()]
-        if not invalid_values.empty:
-            sample = list(invalid_values.unique()[:3])
-            errors.append(
+        invalid = series[coerced.isna() & series.notna()]
+
+        if not invalid.empty:
+            sample = list(invalid.unique()[:3])
+            messages.append(
                 f"Column '{self.column_name}' contains values that are not valid dates: {sample}."
             )
-            return errors
+            failing_indices.update(invalid.index)
 
-        if self.min is not None and (coerced < self.min).any():
-            errors.append(f"Column '{self.column_name}' has dates before {self.min.date()}.")
+        # Perform value checks even if some values are invalid
+        if self.min is not None:
+            mask = coerced < self.min
+            if mask.any():
+                messages.append(f"Column '{self.column_name}' has dates before {self.min.date()}.")
+                failing_indices.update(series[mask].index)
 
-        if self.max is not None and (coerced > self.max).any():
-            errors.append(f"Column '{self.column_name}' has dates after {self.max.date()}.")
+        if self.max is not None:
+            mask = coerced > self.max
+            if mask.any():
+                messages.append(f"Column '{self.column_name}' has dates after {self.max.date()}.")
+                failing_indices.update(series[mask].index)
 
-        return errors
+        return {"messages": messages, "failing_indices": failing_indices}
 
 
 
@@ -65,30 +77,37 @@ class FloatColumnCheck(ColumnCheck):
         self.min = min
         self.max = max
 
-    def validate(self, series: pd.Series) -> list[str]:
-        errors = []
+    def validate(self, series: pd.Series) -> dict:
+        messages = []
+        failing_indices = set()
 
-        # Accept numeric values (float, int, Decimal, np.float32/64) — but NOT str
         valid_numeric_types = (int, float, Decimal, numbers.Real)
         non_float_like = series[~series.map(lambda x: isinstance(x, valid_numeric_types) or pd.isna(x))]
 
         if not non_float_like.empty:
             sample = list(non_float_like.unique()[:3])
-            errors.append(
+            messages.append(
                 f"Column '{self.column_name}' contains values that are not numeric: {sample}."
             )
-            return errors
+            failing_indices.update(non_float_like.index)
 
-        # Perform value checks after confirming valid types
+        # Always continue to value checks
         coerced = pd.to_numeric(series, errors='coerce')
 
-        if self.min is not None and (coerced < self.min).any():
-            errors.append(f"Column '{self.column_name}' has values less than {self.min}.")
+        if self.min is not None:
+            mask = coerced < self.min
+            if mask.any():
+                messages.append(f"Column '{self.column_name}' has values less than {self.min}.")
+                failing_indices.update(series[mask].index)
 
-        if self.max is not None and (coerced > self.max).any():
-            errors.append(f"Column '{self.column_name}' has values greater than {self.max}.")
+        if self.max is not None:
+            mask = coerced > self.max
+            if mask.any():
+                messages.append(f"Column '{self.column_name}' has values greater than {self.max}.")
+                failing_indices.update(series[mask].index)
 
-        return errors
+        return {"messages": messages, "failing_indices": failing_indices}
+
 
 
 class IntColumnCheck(ColumnCheck):
@@ -97,9 +116,10 @@ class IntColumnCheck(ColumnCheck):
         self.min = min
         self.max = max
 
-    def validate(self, series: pd.Series) -> list[str]:
-        errors = []
-
+    def validate(self, series: pd.Series) -> dict:
+        messages = []
+        failing_indices = set()
+    
         def is_integer_like(x):
             if pd.isna(x):
                 return True
@@ -108,59 +128,62 @@ class IntColumnCheck(ColumnCheck):
             if isinstance(x, float) and x.is_integer():
                 return True
             return False
-
+    
         invalid = series[~series.map(is_integer_like)]
         if not invalid.empty:
             sample = list(invalid.unique()[:3])
-            errors.append(
+            messages.append(
                 f"Column '{self.column_name}' contains values that are not integer-like (e.g., decimals or strings): {sample}."
             )
-            return errors
-
-        # Safe to convert for range checks
+            failing_indices.update(invalid.index)
+    
+        # Keep checking even if type issues exist
         coerced = pd.to_numeric(series, errors='coerce')
-
-        if self.min is not None and (coerced < self.min).any():
-            errors.append(f"Column '{self.column_name}' has values less than {self.min}.")
-
-        if self.max is not None and (coerced > self.max).any():
-            errors.append(f"Column '{self.column_name}' has values greater than {self.max}.")
-
-        return errors
-
+    
+        if self.min is not None:
+            mask = coerced < self.min
+            if mask.any():
+                messages.append(f"Column '{self.column_name}' has values less than {self.min}.")
+                failing_indices.update(series[mask].index)
+    
+        if self.max is not None:
+            mask = coerced > self.max
+            if mask.any():
+                messages.append(f"Column '{self.column_name}' has values greater than {self.max}.")
+                failing_indices.update(series[mask].index)
+    
+        return {"messages": messages, "failing_indices": failing_indices}
 
 
 class StringColumnCheck(ColumnCheck):
-    def __init__(
-        self,
-        column_name: str,
-        regex: str = None,
-        in_set: list[str] = None,
-        raise_on_fail: bool = True
-    ):
+    def __init__(self, column_name: str, regex: str = None, in_set: list[str] = None, raise_on_fail: bool = True):
         super().__init__(column_name, raise_on_fail)
         self.regex = regex
         self.in_set = in_set
 
-    def validate(self, series: pd.Series) -> list[str]:
-        errors = []
+    def validate(self, series: pd.Series) -> dict:
+        messages = []
+        failing_indices = set()
 
         if self.regex:
             failed = series.astype(str)[~series.astype(str).str.match(self.regex, na=False)]
             if not failed.empty:
                 sample = list(failed.unique()[:3])
-                errors.append(
+                messages.append(
                     f"Column '{self.column_name}' has values not matching regex '{self.regex}': {sample}."
                 )
+                failing_indices.update(failed.index)
 
         if self.in_set:
-            invalid_values = series[~series.isin(self.in_set)].dropna().unique()
-            if len(invalid_values) > 0:
-                errors.append(
-                    f"Column '{self.column_name}' contains unexpected values: {list(invalid_values[:3])}."
+            invalid_values = series[~series.isin(self.in_set)].dropna()
+            if not invalid_values.empty:
+                sample = list(invalid_values.unique()[:3])
+                messages.append(
+                    f"Column '{self.column_name}' contains unexpected values: {sample}."
                 )
+                failing_indices.update(invalid_values.index)
 
-        return errors
+        return {"messages": messages, "failing_indices": failing_indices}
 
 
 class CustomFunctionCheck(ColumnCheck):
@@ -169,9 +192,18 @@ class CustomFunctionCheck(ColumnCheck):
         self.function = function
         self.description = description or "Custom function check"
 
-    def validate(self, series: pd.Series) -> list[str]:
+    def validate(self, series: pd.Series) -> dict:
+        messages = []
+        failing_indices = set()
+
         invalid = ~series.map(self.function, na_action='ignore')
+
         if invalid.any():
-            bad_values = list(series[invalid].unique()[:3])
-            return [f"{self.description} failed on column '{self.column_name}' for values: {bad_values}."]
-        return []
+            sample = list(series[invalid].unique()[:3])
+            messages.append(
+                f"{self.description} failed on column '{self.column_name}' for values: {sample}."
+            )
+            failing_indices.update(series[invalid].index)
+
+        return {"messages": messages, "failing_indices": failing_indices}
+

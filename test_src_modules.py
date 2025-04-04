@@ -5,12 +5,22 @@ Created on Fri Apr  4 14:51:58 2025
 @author: user
 """
 import importlib
-import os
 import pandas as pd
-import src.schema_builder
-importlib.reload(src.schema_builder)
-from src.schema_builder import FrameCheck
 
+# Reload core modules in correct order
+#import src.schema
+#import src.frame_check
+#importlib.reload(src.schema)
+#importlib.reload(src.frame_check)
+
+from src.frame_check import FrameCheck
+
+
+#from src.frame_check import Schema
+#print(Schema.validate.__code__.co_filename)
+
+
+# Sample DataFrame
 df = pd.DataFrame({
     'id': ['a98325jh', '235lkjl25', '23543k5'],
     'age': [25, 18, 85.0],
@@ -21,6 +31,7 @@ df = pd.DataFrame({
     'phone': ['1231235757', '2828437222', '2139499999']
 })
 
+# Define validation schema
 schema = (
     FrameCheck()
     .column('id')
@@ -32,5 +43,22 @@ schema = (
     .build()
 )
 
+# Run validation and show summary
 result = schema.validate(df)
 print(result.summary())
+
+
+invalid_df = result.get_invalid_rows(df, include_warnings=False)
+print(invalid_df)
+
+
+
+
+
+
+
+
+
+
+
+
