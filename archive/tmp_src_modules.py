@@ -68,8 +68,10 @@ validator = (
 validator = (
     FrameCheck()
     .column('id')
+    .column('score', type='float', min=0.2)
     .column('age', type='int', min=18, max=99)
     .column('score', type='float', min=0.0)
+    .column('gender', type='string', in_set = {'F'})
     .column('score', type='float', max=0.55, warn_only=True)
     .build()
 )

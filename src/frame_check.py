@@ -1,4 +1,5 @@
 import pandas as pd
+from typing import Union, List, Set, Optional, Dict, Any
 
 from .column_checks import (
     IntColumnCheck,
@@ -12,7 +13,12 @@ from .column_checks import (
 
 
 class ValidationResult:
-    def __init__(self, errors: list[str], warnings: list[str], failing_row_indices: set[int] = None):
+    def __init__(
+        self,
+        errors: List[str],
+        warnings: List[str],
+        failing_row_indices: Optional[Set[int]] = None
+    ):
         self.errors = errors
         self.warnings = warnings
         self._failing_row_indices = failing_row_indices or set()
@@ -28,19 +34,18 @@ class ValidationResult:
             failing_indices = self._error_indices
         else:
             failing_indices = self._failing_row_indices
-    
+
         missing = [i for i in failing_indices if i not in df.index]
         if missing:
             raise ValueError(
                 f"{len(missing)} of {len(failing_indices)} failing indices not found in provided DataFrame. "
                 "Make sure you're passing the same DataFrame used during validation."
             )
-    
+
         if not df.index.is_unique:
             raise ValueError("DataFrame index must be unique for get_invalid_rows().")
-    
-        return df.loc[sorted(failing_indices)]
 
+        return df.loc[sorted(failing_indices)]
 
     def summary(self) -> str:
         lines = [
@@ -55,8 +60,7 @@ class ValidationResult:
             lines.extend(f"  - {w}" for w in self.warnings)
         return "\n".join(lines)
 
-
-    def to_dict(self):
+    def to_dict(self) -> Dict[str, Any]:
         return {
             "is_valid": self.is_valid,
             "errors": self.errors,
@@ -64,25 +68,23 @@ class ValidationResult:
         }
 
 
-
 class Schema:
-    def __init__(self, checks: list, disallow_extra_columns: bool = False):
+    def __init__(self, checks: List[Any], disallow_extra_columns: bool = False):
         self.checks = checks
         self.disallow_extra_columns = disallow_extra_columns
 
-    def validate(self, df, verbose = False) -> ValidationResult:
+    def validate(self, df: pd.DataFrame, verbose: bool = False) -> ValidationResult:
         errors = []
         warnings = []
         failing_indices = set()
         error_indices = set()
-        
+
         if self.disallow_extra_columns:
             expected = {check.column_name for check in self.checks}
             actual = set(df.columns)
             extra = actual - expected
             if extra:
                 errors.append(f"Unexpected columns in DataFrame: {sorted(extra)}")
-        
 
         for check in self.checks:
             if check.column_name not in df.columns:
@@ -97,7 +99,9 @@ class Schema:
             series = df[check.column_name]
             result = check.validate(series)
             if not isinstance(result, dict):
-                raise TypeError(f"Validation check for column '{check.column_name}' did not return a dict. Got: {type(result)}")
+                raise TypeError(
+                    f"Validation check for column '{check.column_name}' did not return a dict. Got: {type(result)}"
+                )
 
             messages = result.get("messages", [])
             indices = result.get("failing_indices", [])
@@ -120,18 +124,17 @@ class Schema:
         return result
 
 
-
 class FrameCheck:
     def __init__(self):
         self._checks = []
         self._disallow_extra_columns = False
 
-    def only_defined_columns(self):
+    def only_defined_columns(self) -> 'FrameCheck':
         self._disallow_extra_columns = True
         self._finalized = True
         return self
 
-    def column(self, name: str, **kwargs):
+    def column(self, name: str, **kwargs) -> 'FrameCheck':
         if getattr(self, '_finalized', False):
             raise RuntimeError("Cannot call .column() after .only_defined_columns() — move column definitions above.")
         col_type = kwargs.pop('type', None)
@@ -168,6 +171,9 @@ class FrameCheck:
                 column_name=name,
                 min=kwargs.get('min'),
                 max=kwargs.get('max'),
+                before=kwargs.get('before'),
+                after=kwargs.get('after'),
+                format=kwargs.get('format'),
                 raise_on_fail=raise_on_fail
             ))
 
@@ -189,5 +195,5 @@ class FrameCheck:
 
         return self
 
-    def build(self):
+    def build(self) -> Schema:
         return Schema(self._checks, disallow_extra_columns=self._disallow_extra_columns)
