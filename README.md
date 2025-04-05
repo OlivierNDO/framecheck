@@ -1,4 +1,4 @@
-# framecheck
+# <img src="images/logo.png" alt="Project Logo" width="80" height="80"> framecheck
 
 **Lightweight, flexible, and intuitive validation for pandas DataFrames.**  
 Define expectations for your data, validate them cleanly, and surface friendly errors or warnings — no configuration files, ever.
@@ -130,6 +130,11 @@ error_df = result.get_invalid_rows(df, include_warnings=False)
 
 ## License
 MIT
+
+---
+
+## Contact
+[![LinkedIn Badge](https://img.shields.io/badge/LinkedIn-0077B5?style=for-the-badge&logo=linkedin&logoColor=white)](https://www.linkedin.com/in/oliviernicholas/)
 
 <hr>
 
