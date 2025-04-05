@@ -1,4 +1,5 @@
-# <img src="images/logo.png" alt="Project Logo" width="80" height="80"> framecheck
+# <img src="images/logo.png" alt="Project Logo" width="512" height="125">
+
 
 **Lightweight, flexible, and intuitive validation for pandas DataFrames.**  
 Define expectations for your data, validate them cleanly, and surface friendly errors or warnings — no configuration files, ever.
