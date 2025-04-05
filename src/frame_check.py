@@ -1,6 +1,6 @@
 import pandas as pd
 
-from .schema import (
+from .column_checks import (
     IntColumnCheck,
     FloatColumnCheck,
     StringColumnCheck,
@@ -70,11 +70,19 @@ class Schema:
         self.checks = checks
         self.disallow_extra_columns = disallow_extra_columns
 
-    def validate(self, df) -> ValidationResult:
+    def validate(self, df, verbose = False) -> ValidationResult:
         errors = []
         warnings = []
         failing_indices = set()
         error_indices = set()
+        
+        if self.disallow_extra_columns:
+            expected = {check.column_name for check in self.checks}
+            actual = set(df.columns)
+            extra = actual - expected
+            if extra:
+                errors.append(f"Unexpected columns in DataFrame: {sorted(extra)}")
+        
 
         for check in self.checks:
             if check.column_name not in df.columns:
@@ -97,17 +105,18 @@ class Schema:
             if messages:
                 if check.raise_on_fail:
                     errors.extend(messages)
-                    error_indices.update(indices)  # ✅ Track error-only row indices
+                    error_indices.update(indices)
                 else:
                     warnings.extend(messages)
 
             failing_indices.update(indices)
 
-        print("Errors content:", errors)
-        print("Warnings content:", warnings)
+        if verbose:
+            print("Errors content:", errors)
+            print("Warnings content:", warnings)
 
         result = ValidationResult(errors=errors, warnings=warnings, failing_row_indices=failing_indices)
-        result._error_indices = error_indices  # ✅ Attach for downstream access
+        result._error_indices = error_indices
         return result
 
 

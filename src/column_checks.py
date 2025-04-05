@@ -1,8 +1,10 @@
+from datetime import datetime, timedelta
 from decimal import Decimal
 import numbers
 import numpy as np
 import pandas as pd
 from typing import Any, Callable
+
 
 
 class ColumnCheck:
@@ -16,15 +18,14 @@ class ColumnCheck:
         
 class ColumnExistsCheck(ColumnCheck):
     def validate(self, series: pd.Series) -> dict:
-        return {"messages": [], "failing_indices": set()}
+        return {"messages": [], "failing_indices": set()} # pragma: no cover
 
 
 class BoolColumnCheck(ColumnCheck):
     def validate(self, series: pd.Series) -> dict:
         messages = []
-        invalid_values = series[~series.isin([True, False]) & series.notna()]
+        invalid_values = series[~series.map(lambda x: isinstance(x, bool)) & series.notna()]
         failing_indices = set(invalid_values.index)
-
         if not invalid_values.empty:
             sample = list(invalid_values.unique()[:3])
             messages.append(
@@ -34,19 +35,60 @@ class BoolColumnCheck(ColumnCheck):
         return {"messages": messages, "failing_indices": failing_indices}
 
 
-class DatetimeColumnCheck(ColumnCheck):
-    def __init__(self, column_name: str, min: str = None, max: str = None, raise_on_fail: bool = True):
-        super().__init__(column_name, raise_on_fail)
+class DatetimeColumnCheck:
+    def __init__(
+        self,
+        column_name: str,
+        min: str = None,
+        max: str = None,
+        before: str = None,
+        after: str = None,
+        format: str = None,
+        raise_on_fail: bool = True
+    ):
+        self.column_name = column_name
+        self.raise_on_fail = raise_on_fail
+        self.format = format
+
+        def resolve_bound(value: str | datetime | None, bound_name: str):
+            if value is None:
+                return None
+            if isinstance(value, datetime):
+                return value
+            if isinstance(value, str):
+                value = value.lower()
+                if value == 'today':
+                    return datetime.today().replace(hour=0, minute=0, second=0, microsecond=0)
+                elif value == 'now':
+                    return datetime.now()
+                elif value == 'yesterday':
+                    return (datetime.today() - timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+                elif value == 'tomorrow':
+                    return (datetime.today() + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+                elif self.format:
+                    try:
+                        return datetime.strptime(value, self.format)
+                    except ValueError:
+                        raise ValueError(f"Failed to parse {bound_name}='{value}' using format='{self.format}'")
+                else:
+                    return pd.to_datetime(value)
+            raise TypeError(f"{bound_name} must be a string or datetime, not {type(value)}")
+
         self.min = pd.to_datetime(min) if min else None
         self.max = pd.to_datetime(max) if max else None
+        self.before = resolve_bound(before, "before")
+        self.after = resolve_bound(after, "after")
 
     def validate(self, series: pd.Series) -> dict:
         messages = []
         failing_indices = set()
 
-        coerced = pd.to_datetime(series, errors='coerce')
-        invalid = series[coerced.isna() & series.notna()]
+        try:
+            coerced = pd.to_datetime(series, format=self.format, errors='coerce')
+        except Exception:
+            raise ValueError(f"Could not coerce values in '{self.column_name}' using format='{self.format}'")
 
+        invalid = series[coerced.isna() & series.notna()]
         if not invalid.empty:
             sample = list(invalid.unique()[:3])
             messages.append(
@@ -54,20 +96,31 @@ class DatetimeColumnCheck(ColumnCheck):
             )
             failing_indices.update(invalid.index)
 
-        # Perform value checks even if some values are invalid
-        if self.min is not None:
-            mask = coerced < self.min
-            if mask.any():
-                messages.append(f"Column '{self.column_name}' has dates before {self.min.date()}.")
-                failing_indices.update(series[mask].index)
+        # Inconsistent type detection (e.g., mix of strings, timestamps)
+        non_null = series[series.notna()]
+        types = non_null.map(type).unique()
+        if len(types) > 1:
+            messages.append(
+                f"Column '{self.column_name}' contains inconsistent datetime types: {[t.__name__ for t in types[:3]]}."
+            )
 
-        if self.max is not None:
-            mask = coerced > self.max
-            if mask.any():
-                messages.append(f"Column '{self.column_name}' has dates after {self.max.date()}.")
-                failing_indices.update(series[mask].index)
+        bounds = [
+            ('min', self.min, lambda x: x < self.min),
+            ('max', self.max, lambda x: x > self.max),
+            ('before', self.before, lambda x: x >= self.before),
+            ('after', self.after, lambda x: x <= self.after),
+        ]
+
+        for label, bound, condition in bounds:
+            if bound is not None:
+                mask = condition(coerced)
+                if mask.any():
+                    bound_label = bound.date() if hasattr(bound, "date") else bound
+                    messages.append(f"Column '{self.column_name}' violates '{label}' constraint: {bound_label}.")
+                    failing_indices.update(series[mask].index)
 
         return {"messages": messages, "failing_indices": failing_indices}
+
 
 
 
@@ -166,7 +219,9 @@ class StringColumnCheck(ColumnCheck):
         failing_indices = set()
 
         if self.regex:
-            failed = series.astype(str)[~series.astype(str).str.match(self.regex, na=False)]
+            non_null = series[series.notna()]
+            failed = non_null.astype(str)[~non_null.astype(str).str.match(self.regex)]
+
             if not failed.empty:
                 sample = list(failed.unique()[:3])
                 messages.append(

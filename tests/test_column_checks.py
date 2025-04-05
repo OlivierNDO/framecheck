@@ -1,0 +1,338 @@
+import unittest
+from datetime import datetime, timedelta
+import pandas as pd
+import numpy as np
+from decimal import Decimal
+from src.column_checks import (
+    IntColumnCheck,
+    FloatColumnCheck,
+    StringColumnCheck,
+    BoolColumnCheck,
+    DatetimeColumnCheck,
+    CustomFunctionCheck,
+    ColumnExistsCheck,
+    ColumnCheck
+)
+
+
+class TestColumnCheck(unittest.TestCase):
+
+    def test_validate_raises_not_implemented(self):
+        # Raises NotImplementedError when .validate() is called on the abstract base class ColumnCheck
+        check = ColumnCheck('any_column')
+        with self.assertRaises(NotImplementedError):
+            check.validate(pd.Series([1, 2, 3]))
+
+
+class TestBoolColumnCheck(unittest.TestCase):
+
+    def test_all_valid_booleans(self):
+        series = pd.Series([True, False, True])
+        check = BoolColumnCheck('subscribed')
+        result = check.validate(series)
+        self.assertEqual(result['messages'], [])
+        self.assertEqual(result['failing_indices'], set())
+
+    def test_with_non_boolean_values(self):
+        series = pd.Series([True, 'yes', 0, False])
+        check = BoolColumnCheck('subscribed')
+        result = check.validate(series)
+        self.assertEqual(len(result['messages']), 1)
+        self.assertIn(1, result['failing_indices'])
+        self.assertIn(2, result['failing_indices'])
+
+    def test_all_invalid_values(self):
+        series = pd.Series(['yes', 'no', 1, 0])
+        check = BoolColumnCheck('subscribed')
+        result = check.validate(series)
+        self.assertTrue(result['failing_indices'])
+        self.assertEqual(len(result['failing_indices']), 4)
+
+    def test_ignores_nan_values(self):
+        series = pd.Series([True, None, False, pd.NA, float('nan')])
+        check = BoolColumnCheck('subscribed')
+        result = check.validate(series)
+        self.assertEqual(result['messages'], [])
+        self.assertEqual(result['failing_indices'], set())
+
+
+
+class TestDatetimeColumnCheck(unittest.TestCase):
+
+    def setUp(self):
+        self.col = 'created_at'
+
+    def test_valid_dates_pass(self):
+        data = pd.Series(['2024-01-01', '2024-04-01', '2025-01-01'])
+        check = DatetimeColumnCheck(self.col)
+        result = check.validate(data)
+        self.assertEqual(result['messages'], [])
+        self.assertEqual(result['failing_indices'], set())
+
+    def test_invalid_strings_fail(self):
+        data = pd.Series(['2024-01-01', 'notadate', ''])
+        check = DatetimeColumnCheck(self.col)
+        result = check.validate(data)
+        self.assertTrue(result['messages'])
+        self.assertIn(1, result['failing_indices'])
+
+    def test_format_enforced_correctly(self):
+        data = pd.Series(['01-04-2024', '02-04-2024'])
+        check = DatetimeColumnCheck(self.col, format='%d-%m-%Y')
+        result = check.validate(data)
+        self.assertEqual(result['messages'], [])
+        self.assertEqual(result['failing_indices'], set())
+
+    def test_format_enforced_invalid(self):
+        data = pd.Series(['01-04-2024', 'bad-date'])
+        check = DatetimeColumnCheck(self.col, format='%d-%m-%Y')
+        result = check.validate(data)
+        self.assertTrue(result['messages'])
+        self.assertIn(1, result['failing_indices'])
+
+    def test_min_bound(self):
+        data = pd.Series(['2024-01-01', '2023-01-01'])
+        check = DatetimeColumnCheck(self.col, min='2024-01-01')
+        result = check.validate(data)
+        self.assertTrue(any('min' in m for m in result['messages']))
+        self.assertIn(1, result['failing_indices'])
+
+    def test_max_bound(self):
+        data = pd.Series(['2024-01-01', '2025-01-01'])
+        check = DatetimeColumnCheck(self.col, max='2024-12-31')
+        result = check.validate(data)
+        self.assertTrue(any('max' in m for m in result['messages']))
+        self.assertIn(1, result['failing_indices'])
+
+    def test_before_bound(self):
+        future = (datetime.today() + timedelta(days=1)).strftime('%Y-%m-%d')
+        data = pd.Series([future])
+        check = DatetimeColumnCheck(self.col, before='today')
+        result = check.validate(data)
+        self.assertTrue(any('before' in m for m in result['messages']))
+        self.assertIn(0, result['failing_indices'])
+
+    def test_after_bound(self):
+        past = (datetime.today() - timedelta(days=1)).strftime('%Y-%m-%d')
+        data = pd.Series([past])
+        check = DatetimeColumnCheck(self.col, after='today')
+        result = check.validate(data)
+        self.assertTrue(any('after' in m for m in result['messages']))
+        self.assertIn(0, result['failing_indices'])
+
+    def test_before_after_with_datetime_objects(self):
+        now = datetime.now()
+        early = now - timedelta(days=10)
+        late = now + timedelta(days=10)
+        data = pd.Series([early, now, late])
+        check = DatetimeColumnCheck(self.col, before=now, after=now)
+        result = check.validate(data)
+        self.assertIn(0, result['failing_indices'])
+        self.assertIn(2, result['failing_indices'])
+
+    def test_format_parses_bounds(self):
+        check = DatetimeColumnCheck(self.col, before='04-01-2024', format='%d-%m-%Y')
+        self.assertEqual(check.before, datetime(2024, 1, 4))
+
+    def test_invalid_bound_format_error(self):
+        with self.assertRaises(ValueError):
+            DatetimeColumnCheck(self.col, before='04-01-2024', format='%Y/%m/%d')
+
+    def test_inconsistent_type_warning(self):
+        series = pd.Series(['2024-01-01', pd.Timestamp('2024-01-02')])
+        check = DatetimeColumnCheck(self.col)
+        result = check.validate(series)
+        self.assertTrue(any('inconsistent datetime types' in m.lower() for m in result['messages']))
+
+
+class TestFloatColumnCheck(unittest.TestCase):
+
+    def test_valid_floats(self):
+        series = pd.Series([0.1, 0.5, 0.99])
+        check = FloatColumnCheck('score')
+        result = check.validate(series)
+        self.assertEqual(result['messages'], [])
+        self.assertEqual(result['failing_indices'], set())
+
+    def test_valid_ints_and_decimals(self):
+        series = pd.Series([1, 2.5, Decimal('3.3')])
+        check = FloatColumnCheck('score')
+        result = check.validate(series)
+        self.assertEqual(result['messages'], [])
+        self.assertEqual(result['failing_indices'], set())
+
+    def test_invalid_types(self):
+        series = pd.Series([1.0, 'bad', None])
+        check = FloatColumnCheck('score')
+        result = check.validate(series)
+        self.assertTrue(any("not numeric" in msg for msg in result['messages']))
+        self.assertIn(1, result['failing_indices'])
+
+    def test_min_constraint(self):
+        series = pd.Series([0.5, -0.1, 1.0])
+        check = FloatColumnCheck('score', min=0.0)
+        result = check.validate(series)
+        self.assertIn("less than 0.0", result['messages'][0])
+        self.assertIn(1, result['failing_indices'])
+
+    def test_max_constraint(self):
+        series = pd.Series([0.3, 0.9, 1.1])
+        check = FloatColumnCheck('score', max=1.0)
+        result = check.validate(series)
+        self.assertIn("greater than 1.0", result['messages'][0])
+        self.assertIn(2, result['failing_indices'])
+
+    def test_both_min_and_max(self):
+        series = pd.Series([-1, 0.5, 2])
+        check = FloatColumnCheck('score', min=0.0, max=1.0)
+        result = check.validate(series)
+        self.assertEqual(len(result['messages']), 2)
+        self.assertIn(0, result['failing_indices'])
+        self.assertIn(2, result['failing_indices'])
+
+    def test_nan_values_are_ignored(self):
+        series = pd.Series([0.1, np.nan, 0.8])
+        check = FloatColumnCheck('score', min=0.0, max=1.0)
+        result = check.validate(series)
+        self.assertEqual(result['messages'], [])
+        self.assertEqual(result['failing_indices'], set())
+
+
+class TestIntColumnCheck(unittest.TestCase):
+
+    def test_valid_integer_values(self):
+        series = pd.Series([1, 2, 3])
+        check = IntColumnCheck('col')
+        result = check.validate(series)
+        self.assertEqual(result['messages'], [])
+        self.assertEqual(result['failing_indices'], set())
+
+    def test_integer_like_floats_are_accepted(self):
+        series = pd.Series([1.0, 2.0, 3.0])
+        check = IntColumnCheck('col')
+        result = check.validate(series)
+        self.assertEqual(result['messages'], [])
+        self.assertEqual(result['failing_indices'], set())
+
+    def test_non_integer_values_flagged(self):
+        series = pd.Series([1.1, 2.5, 'a'])
+        check = IntColumnCheck('col')
+        result = check.validate(series)
+        self.assertEqual(len(result['messages']), 1)
+        self.assertIn(1, result['failing_indices'])
+        self.assertIn(2, result['failing_indices'])
+
+    def test_range_check_min(self):
+        series = pd.Series([10, 5, 20])
+        check = IntColumnCheck('col', min=6)
+        result = check.validate(series)
+        self.assertIn("less than 6", result['messages'][0])
+        self.assertIn(1, result['failing_indices'])
+
+    def test_range_check_max(self):
+        series = pd.Series([10, 25, 20])
+        check = IntColumnCheck('col', max=20)
+        result = check.validate(series)
+        self.assertIn("greater than 20", result['messages'][0])
+        self.assertIn(1, result['failing_indices'])
+
+    def test_range_check_both_min_and_max(self):
+        series = pd.Series([1, 10, 30])
+        check = IntColumnCheck('col', min=5, max=25)
+        result = check.validate(series)
+        self.assertEqual(len(result['messages']), 2)
+        self.assertIn(0, result['failing_indices'])
+        self.assertIn(2, result['failing_indices'])
+
+    def test_nan_values_are_ignored(self):
+        series = pd.Series([1, np.nan, 10.0])
+        check = IntColumnCheck('col', min=0, max=100)
+        result = check.validate(series)
+        self.assertEqual(result['messages'], [])
+        self.assertEqual(result['failing_indices'], set())
+
+    def test_booleans_are_excluded(self):
+        series = pd.Series([1, True, False])
+        check = IntColumnCheck('col')
+        result = check.validate(series)
+        self.assertEqual(len(result['messages']), 1)
+        self.assertIn(1, result['failing_indices'])
+        self.assertIn(2, result['failing_indices'])
+
+
+class TestStringColumnCheck(unittest.TestCase):
+
+    def test_regex_match_all(self):
+        series = pd.Series(['abc@example.com', 'def@site.org'])
+        check = StringColumnCheck('email', regex=r'.+@.+\..+')
+        result = check.validate(series)
+        self.assertEqual(result['messages'], [])
+        self.assertEqual(result['failing_indices'], set())
+
+    def test_regex_match_some_fail(self):
+        series = pd.Series(['abc@example.com', 'invalid_email', 'noatsign'])
+        check = StringColumnCheck('email', regex=r'.+@.+\..+')
+        result = check.validate(series)
+        self.assertIn("email", result['messages'][0])
+        self.assertEqual(result['failing_indices'], {1, 2})
+
+    def test_regex_with_nulls(self):
+        series = pd.Series(['abc@example.com', None, np.nan])
+        check = StringColumnCheck('email', regex=r'.+@.+\..+')
+        result = check.validate(series)
+        self.assertEqual(result['messages'], [])
+        self.assertEqual(result['failing_indices'], set())
+
+    def test_in_set_valid(self):
+        series = pd.Series(['red', 'green', 'blue'])
+        check = StringColumnCheck('color', in_set=['red', 'green', 'blue'])
+        result = check.validate(series)
+        self.assertEqual(result['messages'], [])
+        self.assertEqual(result['failing_indices'], set())
+
+    def test_in_set_invalid(self):
+        series = pd.Series(['red', 'yellow', 'blue'])
+        check = StringColumnCheck('color', in_set=['red', 'green', 'blue'])
+        result = check.validate(series)
+        self.assertIn("color", result['messages'][0])
+        self.assertEqual(result['failing_indices'], {1})
+
+    def test_in_set_with_nulls(self):
+        series = pd.Series(['red', None, 'blue', np.nan])
+        check = StringColumnCheck('color', in_set=['red', 'blue'])
+        result = check.validate(series)
+        self.assertEqual(result['messages'], [])
+        self.assertEqual(result['failing_indices'], set())
+
+    def test_both_regex_and_in_set(self):
+        series = pd.Series(['apple', 'banana', 'bad!', 'not_fruit'])
+        check = StringColumnCheck('fruit', regex=r'^[a-z]+$', in_set=['apple', 'banana', 'cherry'])
+        result = check.validate(series)
+        self.assertEqual(result['failing_indices'], {2, 3})
+        self.assertEqual(len(result['messages']), 2)  # one for regex, one for in_set
+
+    def test_empty_series(self):
+        series = pd.Series([], dtype=object)
+        check = StringColumnCheck('anything', regex=r'.*')
+        result = check.validate(series)
+        self.assertEqual(result['messages'], [])
+        self.assertEqual(result['failing_indices'], set())
+
+    def test_non_string_values_are_coerced(self):
+        series = pd.Series(['abc', 123, True])
+        check = StringColumnCheck('mixed', regex=r'^[a-z]+$')
+        result = check.validate(series)
+        self.assertEqual(result['failing_indices'], {1, 2})
+
+    def test_repr_and_initialization(self):
+        check = StringColumnCheck('name', regex='^[a-z]+$', in_set=['alice', 'bob'], raise_on_fail=False)
+        self.assertEqual(check.column_name, 'name')
+        self.assertEqual(check.regex, '^[a-z]+$')
+        self.assertEqual(check.in_set, ['alice', 'bob'])
+        self.assertFalse(check.raise_on_fail)
+
+
+
+
+if __name__ == '__main__':
+    unittest.main()
