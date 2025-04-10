@@ -1,6 +1,6 @@
 # <img src="images/logo.png" alt="Project Logo" width="512" height="125">
 
-[![codecov](https://codecov.io/gh/OlivierNDO/framecheck/graph/badge.svg?token=CL7ZD1YXMA)](https://codecov.io/gh/OlivierNDO/framecheck)
+[![codecov](https://codecov.io/gh/OlivierNDO/framecheck/branch/main/graph/badge.svg)](https://codecov.io/gh/OlivierNDO/framecheck)
 
 
 **Lightweight, flexible, and intuitive validation for pandas DataFrames.**  
