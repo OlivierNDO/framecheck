@@ -132,7 +132,9 @@ Column 'score' has values greater than 0.6.
 ```
 
 
+---
 
+### More examples
 
 All examples below use the same DataFrame:
 
