@@ -24,6 +24,19 @@ class TestFrameCheckDataFrameChecks(unittest.TestCase):
         schema = FrameCheck().empty().build()
         result = schema.validate(df)
         self.assertTrue(result.is_valid)
+        
+    def test_columns_applies_check_to_multiple_fields(self):
+        df = pd.DataFrame({
+            'age': [25, 18, 85.0],
+            'score': [32, 50, 75]
+        })
+        schema = FrameCheck().columns(['age', 'score'], type='float', max=70).build()
+        result = schema.validate(df)
+        
+        self.assertFalse(result.is_valid)
+        self.assertEqual(len(result.errors), 1)  # Only one column (score) fails
+        self.assertIn('greater than', result.errors[0])
+
 
 
 class TestMultipleChecksSameColumn(unittest.TestCase):

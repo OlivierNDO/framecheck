@@ -199,6 +199,12 @@ class FrameCheck:
             ))
 
         return self
+    
+    def columns(self, names: List[str], **kwargs) -> 'FrameCheck':
+        for name in names:
+            self.column(name, **kwargs)
+        return self
+
 
     def unique(self, columns: Optional[List[str]] = None) -> 'FrameCheck':
         self._dataframe_checks.append(UniquenessCheck(columns=columns))
