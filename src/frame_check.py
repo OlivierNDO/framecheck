@@ -20,6 +20,8 @@ from .dataframe_checks import (
     
 )
 
+from src.utilities import CheckFactory
+
 class ValidationResult:
     def __init__(
         self,
@@ -139,66 +141,25 @@ class FrameCheck:
         self._finalized = True
         return self
 
+
     def column(self, name: str, **kwargs) -> 'FrameCheck':
         if self._finalized:
-            raise RuntimeError("Cannot call .column() after .only_defined_columns() — move column definitions above.")
+            raise RuntimeError("Cannot call .column() after .only_defined_columns()")
+    
         col_type = kwargs.pop('type', None)
         raise_on_fail = not kwargs.pop('warn_only', False)
-
-        if col_type is None and 'regex' not in kwargs and 'in_set' not in kwargs and 'function' not in kwargs:
+    
+        if col_type is None and not kwargs:
             self._column_checks.append(ColumnExistsCheck(name, raise_on_fail))
             return self
-
-        if col_type == 'int':
-            self._column_checks.append(IntColumnCheck(
-                column_name=name,
-                min=kwargs.get('min'),
-                max=kwargs.get('max'),
-                raise_on_fail=raise_on_fail
-            ))
-
-        elif col_type == 'float':
-            self._column_checks.append(FloatColumnCheck(
-                column_name=name,
-                min=kwargs.get('min'),
-                max=kwargs.get('max'),
-                raise_on_fail=raise_on_fail
-            ))
-
-        elif col_type == 'bool':
-            self._column_checks.append(BoolColumnCheck(
-                column_name=name,
-                raise_on_fail=raise_on_fail
-            ))
-
-        elif col_type == 'datetime':
-            self._column_checks.append(DatetimeColumnCheck(
-                column_name=name,
-                min=kwargs.get('min'),
-                max=kwargs.get('max'),
-                before=kwargs.get('before'),
-                after=kwargs.get('after'),
-                format=kwargs.get('format'),
-                raise_on_fail=raise_on_fail
-            ))
-
-        elif col_type == 'string':
-            self._column_checks.append(StringColumnCheck(
-                column_name=name,
-                regex=kwargs.get('regex'),
-                in_set=kwargs.get('in_set'),
-                raise_on_fail=raise_on_fail
-            ))
-
-        elif 'function' in kwargs:
-            self._column_checks.append(CustomFunctionCheck(
-                column_name=name,
-                function=kwargs['function'],
-                description=kwargs.get('description', ''),
-                raise_on_fail=raise_on_fail
-            ))
-
+    
+        if 'function' in kwargs:
+            self._column_checks.append(CustomFunctionCheck(column_name=name, raise_on_fail=raise_on_fail, **kwargs))
+            return self
+    
+        self._column_checks.append(CheckFactory.create(col_type, name, raise_on_fail, **kwargs))
         return self
+
     
     def columns(self, names: List[str], **kwargs) -> 'FrameCheck':
         for name in names:

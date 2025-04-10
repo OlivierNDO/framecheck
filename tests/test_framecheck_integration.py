@@ -34,7 +34,7 @@ class TestFrameCheckDataFrameChecks(unittest.TestCase):
         result = schema.validate(df)
         
         self.assertFalse(result.is_valid)
-        self.assertEqual(len(result.errors), 1)  # Only one column (score) fails
+        self.assertEqual(len(result.errors), 2)
         self.assertIn('greater than', result.errors[0])
 
 

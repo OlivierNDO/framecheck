@@ -4,7 +4,7 @@ import numbers
 import numpy as np
 import pandas as pd
 from typing import Any, Callable, List, Optional, Union
-
+from src.utilities import CheckFactory
 
 class ColumnCheck:
     def __init__(self, column_name: str, raise_on_fail: bool = True):
@@ -20,6 +20,7 @@ class ColumnExistsCheck(ColumnCheck):
         return {"messages": [], "failing_indices": set()}  # pragma: no cover
 
 
+@CheckFactory.register('bool')
 class BoolColumnCheck(ColumnCheck):
     def validate(self, series: pd.Series) -> dict:
         messages = []
@@ -32,7 +33,7 @@ class BoolColumnCheck(ColumnCheck):
             )
         return {"messages": messages, "failing_indices": failing_indices}
 
-
+@CheckFactory.register('datetime')
 class DatetimeColumnCheck(ColumnCheck):
     def __init__(
         self,
@@ -119,6 +120,8 @@ class DatetimeColumnCheck(ColumnCheck):
         return {"messages": messages, "failing_indices": failing_indices}
 
 
+
+@CheckFactory.register('float')
 class FloatColumnCheck(ColumnCheck):
     def __init__(self, column_name: str, min: Optional[float] = None, max: Optional[float] = None, raise_on_fail: bool = True):
         super().__init__(column_name, raise_on_fail)
@@ -164,6 +167,7 @@ class FloatColumnCheck(ColumnCheck):
         return {"messages": messages, "failing_indices": failing_indices}
 
 
+@CheckFactory.register('int')
 class IntColumnCheck(ColumnCheck):
     def __init__(self, column_name: str, min: Optional[int] = None, max: Optional[int] = None, raise_on_fail: bool = True):
         super().__init__(column_name, raise_on_fail)
@@ -219,7 +223,7 @@ class IntColumnCheck(ColumnCheck):
         return {"messages": messages, "failing_indices": failing_indices}
 
 
-
+@CheckFactory.register('string')
 class StringColumnCheck(ColumnCheck):
     def __init__(self, column_name: str, regex: Optional[str] = None, in_set: Optional[List[str]] = None, raise_on_fail: bool = True):
         super().__init__(column_name, raise_on_fail)
@@ -250,6 +254,8 @@ class StringColumnCheck(ColumnCheck):
                 failing_indices.update(invalid_values.index)
 
         return {"messages": messages, "failing_indices": failing_indices}
+
+
 
 
 class CustomFunctionCheck(ColumnCheck):
