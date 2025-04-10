@@ -1,5 +1,7 @@
 # <img src="images/logo.png" alt="Project Logo" width="512" height="125">
 
+[![codecov](https://codecov.io/gh/OlivierNDO/framecheck/graph/badge.svg?token=CL7ZD1YXMA)](https://codecov.io/gh/OlivierNDO/framecheck)
+
 
 **Lightweight, flexible, and intuitive validation for pandas DataFrames.**  
 Define expectations for your data, validate them cleanly, and surface friendly errors or warnings — no configuration files, ever.
