@@ -1,7 +1,8 @@
 import unittest
 import pandas as pd
 from src.frame_check import Schema, ValidationResult
-from src.column_checks import ColumnCheck, ColumnExistsCheck
+from src.column_checks import ColumnCheck
+from src.dataframe_checks import DefinedColumnsOnlyCheck
 
 
 class DummyCheck(ColumnCheck):
@@ -15,6 +16,7 @@ class DummyCheck(ColumnCheck):
 
 
 class TestSchema(unittest.TestCase):
+    """Tests Schema integration with both column and dataframe-level checks."""
 
     def setUp(self):
         self.df = pd.DataFrame({
@@ -24,46 +26,58 @@ class TestSchema(unittest.TestCase):
         })
 
     def test_validation_success(self):
-        checks = [DummyCheck('a'), DummyCheck('b')]
-        schema = Schema(checks)
+        schema = Schema(
+            column_checks=[DummyCheck('a'), DummyCheck('b')],
+            dataframe_checks=[]
+        )
         result = schema.validate(self.df)
         self.assertTrue(result.is_valid)
         self.assertEqual(result.errors, [])
         self.assertEqual(result.warnings, [])
 
     def test_validation_with_errors(self):
-        checks = [DummyCheck('a', messages=['fail a'], indices={1})]
-        schema = Schema(checks)
+        schema = Schema(
+            column_checks=[DummyCheck('a', messages=['fail a'], indices={1})],
+            dataframe_checks=[]
+        )
         result = schema.validate(self.df)
         self.assertFalse(result.is_valid)
         self.assertIn('fail a', result.errors)
         self.assertIn(1, result.get_invalid_rows(self.df).index)
 
     def test_validation_with_warnings(self):
-        checks = [DummyCheck('a', messages=['warn a'], indices={1}, raise_on_fail=False)]
-        schema = Schema(checks)
+        schema = Schema(
+            column_checks=[DummyCheck('a', messages=['warn a'], indices={1}, raise_on_fail=False)],
+            dataframe_checks=[]
+        )
         result = schema.validate(self.df)
         self.assertTrue(result.is_valid)
         self.assertEqual(result.errors, [])
         self.assertIn('warn a', result.warnings)
 
     def test_missing_column_error(self):
-        checks = [DummyCheck('missing_column')]
-        schema = Schema(checks)
+        schema = Schema(
+            column_checks=[DummyCheck('missing_column')],
+            dataframe_checks=[]
+        )
         result = schema.validate(self.df)
         self.assertFalse(result.is_valid)
         self.assertIn("does not exist in DataFrame", result.errors[0])
 
     def test_only_defined_columns_blocks_extras(self):
-        checks = [DummyCheck('a'), DummyCheck('b')]
-        schema = Schema(checks, disallow_extra_columns=True)
+        schema = Schema(
+            column_checks=[DummyCheck('a'), DummyCheck('b')],
+            dataframe_checks=[DefinedColumnsOnlyCheck(expected_columns=['a', 'b'])]
+        )
         result = schema.validate(self.df)
         self.assertFalse(result.is_valid)
         self.assertIn("Unexpected columns", result.errors[0])
 
-    def test_ignore_extra_columns_when_allowed(self):
-        checks = [DummyCheck('a'), DummyCheck('b')]
-        schema = Schema(checks, disallow_extra_columns=False)
+    def test_ignore_extra_columns_when_not_checked(self):
+        schema = Schema(
+            column_checks=[DummyCheck('a'), DummyCheck('b')],
+            dataframe_checks=[]
+        )
         result = schema.validate(self.df)
         self.assertTrue(result.is_valid)
 
@@ -72,7 +86,10 @@ class TestSchema(unittest.TestCase):
             def validate(self, series: pd.Series):
                 return "not a dict"
 
-        schema = Schema([BadCheck('a')])
+        schema = Schema(
+            column_checks=[BadCheck('a')],
+            dataframe_checks=[]
+        )
         with self.assertRaises(TypeError):
             schema.validate(self.df)
 

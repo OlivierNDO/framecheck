@@ -11,6 +11,12 @@ from .column_checks import (
     ColumnExistsCheck
 )
 
+from .dataframe_checks import (
+    DataFrameCheck,
+    UniquenessCheck,
+    DefinedColumnsOnlyCheck
+    
+)
 
 class ValidationResult:
     def __init__(
@@ -69,9 +75,9 @@ class ValidationResult:
 
 
 class Schema:
-    def __init__(self, checks: List[Any], disallow_extra_columns: bool = False):
-        self.checks = checks
-        self.disallow_extra_columns = disallow_extra_columns
+    def __init__(self, column_checks: List, dataframe_checks: List):
+        self.column_checks = column_checks
+        self.dataframe_checks = dataframe_checks
 
     def validate(self, df: pd.DataFrame, verbose: bool = False) -> ValidationResult:
         errors = []
@@ -79,14 +85,8 @@ class Schema:
         failing_indices = set()
         error_indices = set()
 
-        if self.disallow_extra_columns:
-            expected = {check.column_name for check in self.checks}
-            actual = set(df.columns)
-            extra = actual - expected
-            if extra:
-                errors.append(f"Unexpected columns in DataFrame: {sorted(extra)}")
-
-        for check in self.checks:
+        # Column-level checks
+        for check in self.column_checks:
             if check.column_name not in df.columns:
                 msg = (
                     f"Column '{check.column_name}' is missing."
@@ -96,56 +96,59 @@ class Schema:
                 (errors if check.raise_on_fail else warnings).append(msg)
                 continue
 
-            series = df[check.column_name]
-            result = check.validate(series)
+            result = check.validate(df[check.column_name])
             if not isinstance(result, dict):
                 raise TypeError(
                     f"Validation check for column '{check.column_name}' did not return a dict. Got: {type(result)}"
                 )
-
-            messages = result.get("messages", [])
-            indices = result.get("failing_indices", [])
-
-            if messages:
+                        
+            if result.get("messages"):
                 if check.raise_on_fail:
-                    errors.extend(messages)
-                    error_indices.update(indices)
+                    errors.extend(result["messages"])
+                    error_indices.update(result["failing_indices"])
                 else:
-                    warnings.extend(messages)
+                    warnings.extend(result["messages"])
+                failing_indices.update(result["failing_indices"])
 
-            failing_indices.update(indices)
-
-        if verbose:
-            print("Errors content:", errors)
-            print("Warnings content:", warnings)
+        # DataFrame-level checks
+        for df_check in self.dataframe_checks:
+            result = df_check.validate(df)
+            if result.get("messages"):
+                if df_check.raise_on_fail:
+                    errors.extend(result["messages"])
+                    error_indices.update(result["failing_indices"])
+                else:
+                    warnings.extend(result["messages"])
+                failing_indices.update(result["failing_indices"])
 
         result = ValidationResult(errors=errors, warnings=warnings, failing_row_indices=failing_indices)
         result._error_indices = error_indices
         return result
 
 
+
 class FrameCheck:
     def __init__(self):
-        self._checks = []
-        self._disallow_extra_columns = False
+        self._column_checks = []
+        self._dataframe_checks = []
+        self._finalized = False
 
     def only_defined_columns(self) -> 'FrameCheck':
-        self._disallow_extra_columns = True
         self._finalized = True
         return self
 
     def column(self, name: str, **kwargs) -> 'FrameCheck':
-        if getattr(self, '_finalized', False):
+        if self._finalized:
             raise RuntimeError("Cannot call .column() after .only_defined_columns() — move column definitions above.")
         col_type = kwargs.pop('type', None)
         raise_on_fail = not kwargs.pop('warn_only', False)
 
         if col_type is None and 'regex' not in kwargs and 'in_set' not in kwargs and 'function' not in kwargs:
-            self._checks.append(ColumnExistsCheck(name, raise_on_fail))
+            self._column_checks.append(ColumnExistsCheck(name, raise_on_fail))
             return self
 
         if col_type == 'int':
-            self._checks.append(IntColumnCheck(
+            self._column_checks.append(IntColumnCheck(
                 column_name=name,
                 min=kwargs.get('min'),
                 max=kwargs.get('max'),
@@ -153,7 +156,7 @@ class FrameCheck:
             ))
 
         elif col_type == 'float':
-            self._checks.append(FloatColumnCheck(
+            self._column_checks.append(FloatColumnCheck(
                 column_name=name,
                 min=kwargs.get('min'),
                 max=kwargs.get('max'),
@@ -161,13 +164,13 @@ class FrameCheck:
             ))
 
         elif col_type == 'bool':
-            self._checks.append(BoolColumnCheck(
+            self._column_checks.append(BoolColumnCheck(
                 column_name=name,
                 raise_on_fail=raise_on_fail
             ))
 
         elif col_type == 'datetime':
-            self._checks.append(DatetimeColumnCheck(
+            self._column_checks.append(DatetimeColumnCheck(
                 column_name=name,
                 min=kwargs.get('min'),
                 max=kwargs.get('max'),
@@ -178,7 +181,7 @@ class FrameCheck:
             ))
 
         elif col_type == 'string':
-            self._checks.append(StringColumnCheck(
+            self._column_checks.append(StringColumnCheck(
                 column_name=name,
                 regex=kwargs.get('regex'),
                 in_set=kwargs.get('in_set'),
@@ -186,7 +189,7 @@ class FrameCheck:
             ))
 
         elif 'function' in kwargs:
-            self._checks.append(CustomFunctionCheck(
+            self._column_checks.append(CustomFunctionCheck(
                 column_name=name,
                 function=kwargs['function'],
                 description=kwargs.get('description', ''),
@@ -195,5 +198,12 @@ class FrameCheck:
 
         return self
 
+    def unique(self, columns: Optional[List[str]] = None) -> 'FrameCheck':
+        self._dataframe_checks.append(UniquenessCheck(columns=columns))
+        return self
+
     def build(self) -> Schema:
-        return Schema(self._checks, disallow_extra_columns=self._disallow_extra_columns)
+        if self._finalized:
+            expected_cols = [check.column_name for check in self._column_checks if hasattr(check, 'column_name')]
+            self._dataframe_checks.append(DefinedColumnsOnlyCheck(expected_columns=expected_cols))
+        return Schema(self._column_checks, self._dataframe_checks)
