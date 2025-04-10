@@ -143,6 +143,37 @@ class TestDatetimeColumnCheck(unittest.TestCase):
         check = DatetimeColumnCheck(self.col)
         result = check.validate(series)
         self.assertTrue(any('inconsistent datetime types' in m.lower() for m in result['messages']))
+        
+    def test_now_bound(self):
+        data = pd.Series([(datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d')])
+        check = DatetimeColumnCheck(self.col, before='now')
+        result = check.validate(data)
+        self.assertTrue(any('before' in m for m in result['messages']))
+
+    def test_tomorrow_bound(self):
+        tomorrow = datetime.today() + timedelta(days=1)
+        date_str = tomorrow.strftime('%Y-%m-%d')
+        check = DatetimeColumnCheck(self.col, before=tomorrow)
+        data = pd.Series([date_str])
+        result = check.validate(data)
+        self.assertEqual(result['messages'], [])
+    
+    def test_yesterday_bound(self):
+        yesterday = (datetime.today() - timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+        date_str = yesterday.strftime('%Y-%m-%d')
+        check = DatetimeColumnCheck(self.col, after=yesterday)
+        data = pd.Series([date_str])
+        result = check.validate(data)
+        self.assertEqual(result['messages'], [])
+
+    def test_invalid_bound_type_raises_type_error(self):
+        with self.assertRaises(TypeError):
+            DatetimeColumnCheck(self.col, before=12345)
+
+    def test_uncoercible_date_format_raises_value_error(self):
+        with self.assertRaises(ValueError):
+            DatetimeColumnCheck(self.col, before='04-01-2024', format='%Y/%m/%d')
+
 
 
 class TestFloatColumnCheck(unittest.TestCase):
@@ -196,6 +227,22 @@ class TestFloatColumnCheck(unittest.TestCase):
         result = check.validate(series)
         self.assertEqual(result['messages'], [])
         self.assertEqual(result['failing_indices'], set())
+        
+    def test_all_invalid_types_skips_range_and_inf_checks(self):
+        series = pd.Series(['a', 'b', 'c'])
+        check = FloatColumnCheck('score')
+        result = check.validate(series)
+        self.assertTrue(any('not numeric' in m for m in result['messages']))
+        self.assertEqual(len(result['failing_indices']), 3)
+
+    def test_infinite_values_trigger_warning(self):
+        series = pd.Series([1.0, np.inf, 2.0, -np.inf])
+        check = FloatColumnCheck('score')
+        result = check.validate(series)
+        self.assertTrue(any('infinite values' in m for m in result['messages']))
+        self.assertIn(1, result['failing_indices'])
+        self.assertIn(3, result['failing_indices'])
+
 
 
 class TestIntColumnCheck(unittest.TestCase):
@@ -256,6 +303,14 @@ class TestIntColumnCheck(unittest.TestCase):
         check = IntColumnCheck('col')
         result = check.validate(series)
         self.assertEqual(len(result['messages']), 1)
+        self.assertIn(1, result['failing_indices'])
+        self.assertIn(2, result['failing_indices'])
+        
+    def test_infinite_values_in_int_column(self):
+        series = pd.Series([1.0, float('inf'), float('-inf')])
+        check = IntColumnCheck('col')
+        result = check.validate(series)
+        self.assertTrue(any('infinite values' in m.lower() for m in result['messages']))
         self.assertIn(1, result['failing_indices'])
         self.assertIn(2, result['failing_indices'])
 

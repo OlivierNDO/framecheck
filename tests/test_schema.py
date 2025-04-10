@@ -92,6 +92,23 @@ class TestSchema(unittest.TestCase):
         )
         with self.assertRaises(TypeError):
             schema.validate(self.df)
+            
+    def test_dataframe_check_warn_only(self):
+        class DummyDFCheck:
+            def __init__(self):
+                self.raise_on_fail = False
+    
+            def validate(self, df):
+                return {"messages": ["warn from df check"], "failing_indices": set()}
+    
+        schema = Schema(
+            column_checks=[],
+            dataframe_checks=[DummyDFCheck()]
+        )
+        result = schema.validate(self.df)
+        self.assertTrue(result.is_valid)
+        self.assertIn("warn from df check", result.warnings)
+
 
 
 if __name__ == '__main__':

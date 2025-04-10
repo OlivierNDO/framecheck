@@ -61,6 +61,26 @@ class TestValidationResult(unittest.TestCase):
         with self.assertRaises(ValueError):
             result.get_invalid_rows(self.df, include_warnings=False)
             
+    def test_summary_with_warnings_only(self):
+        result = ValidationResult(errors=[], warnings=['warn one', 'warn two'])
+        summary = result.summary()
+        self.assertIn("Validation PASSED", summary)
+        self.assertIn("2 warning(s)", summary)
+        self.assertIn("Warnings:", summary)
+        self.assertIn("warn one", summary)
+        self.assertIn("warn two", summary)
+
+    def test_summary_with_errors_and_warnings(self):
+        result = ValidationResult(errors=['error 1'], warnings=['warn 1'])
+        summary = result.summary()
+        self.assertIn("Validation FAILED", summary)
+        self.assertIn("1 error(s), 1 warning(s)", summary)
+        self.assertIn("Errors:", summary)
+        self.assertIn("error 1", summary)
+        self.assertIn("Warnings:", summary)
+        self.assertIn("warn 1", summary)
+
+            
     def test_to_dict_all_clear(self):
         result = ValidationResult(errors=[], warnings=[])
         self.assertEqual(result.to_dict(), {

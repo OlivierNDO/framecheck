@@ -14,7 +14,9 @@ from .column_checks import (
 from .dataframe_checks import (
     DataFrameCheck,
     UniquenessCheck,
-    DefinedColumnsOnlyCheck
+    DefinedColumnsOnlyCheck,
+    IsEmptyCheck,
+    NotEmptyCheck
     
 )
 
@@ -201,6 +203,15 @@ class FrameCheck:
     def unique(self, columns: Optional[List[str]] = None) -> 'FrameCheck':
         self._dataframe_checks.append(UniquenessCheck(columns=columns))
         return self
+    
+    def empty(self) -> 'FrameCheck':
+        self._dataframe_checks.append(IsEmptyCheck())
+        return self
+
+    def not_empty(self) -> 'FrameCheck':
+        self._dataframe_checks.append(NotEmptyCheck())
+        return self
+    
 
     def build(self) -> Schema:
         if self._finalized:

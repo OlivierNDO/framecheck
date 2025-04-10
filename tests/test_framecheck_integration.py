@@ -5,6 +5,27 @@ from decimal import Decimal
 from src.frame_check import FrameCheck
 
 
+class TestFrameCheckDataFrameChecks(unittest.TestCase):
+
+    def test_unique_check_via_framecheck(self):
+        df = pd.DataFrame({'a': [1, 2, 2]})
+        schema = FrameCheck().column('a', type='int').unique(columns=['a']).build()
+        result = schema.validate(df)
+        self.assertIn('not unique', result.summary().lower())
+
+    def test_not_empty_check_via_framecheck(self):
+        df = pd.DataFrame({'a': [1]})
+        schema = FrameCheck().not_empty().build()
+        result = schema.validate(df)
+        self.assertTrue(result.is_valid)
+
+    def test_empty_check_via_framecheck(self):
+        df = pd.DataFrame(columns=['a'])
+        schema = FrameCheck().empty().build()
+        result = schema.validate(df)
+        self.assertTrue(result.is_valid)
+
+
 class TestMultipleChecksSameColumn(unittest.TestCase):
     """Tests handling of multiple sequential checks applied to the same column."""
 

@@ -39,10 +39,33 @@ class UniquenessCheck(DataFrameCheck):
         return {"messages": messages, "failing_indices": failing_indices}
 
 
-class DefinedColumnsOnlyCheck:
+class NotEmptyCheck(DataFrameCheck):
+    def __init__(self, raise_on_fail: bool = True):
+        super().__init__(raise_on_fail)
+
+    def validate(self, df: pd.DataFrame) -> dict:
+        messages = []
+        if df.empty:
+            messages.append("DataFrame is unexpectedly empty.")
+        return {"messages": messages, "failing_indices": set()}
+
+
+class IsEmptyCheck(DataFrameCheck):
+    def __init__(self, raise_on_fail: bool = True):
+        super().__init__(raise_on_fail)
+
+    def validate(self, df: pd.DataFrame) -> dict:
+        messages = []
+        if not df.empty:
+            messages.append("DataFrame is unexpectedly non-empty.")
+        return {"messages": messages, "failing_indices": set()}
+
+
+
+class DefinedColumnsOnlyCheck(DataFrameCheck):
     def __init__(self, expected_columns: List[str], raise_on_fail: bool = True):
+        super().__init__(raise_on_fail)
         self.expected_columns = set(expected_columns)
-        self.raise_on_fail = raise_on_fail
 
     def validate(self, df: pd.DataFrame) -> dict:
         actual = set(df.columns)

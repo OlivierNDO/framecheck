@@ -104,8 +104,8 @@ class DatetimeColumnCheck(ColumnCheck):
         bounds = [
             ('min', self.min, lambda x: x < self.min),
             ('max', self.max, lambda x: x > self.max),
-            ('before', self.before, lambda x: x >= self.before),
-            ('after', self.after, lambda x: x <= self.after),
+            ('before', self.before, lambda x: x > self.before),
+            ('after', self.after, lambda x: x < self.after),
         ]
 
         for label, bound, condition in bounds:
@@ -173,7 +173,7 @@ class IntColumnCheck(ColumnCheck):
     def validate(self, series: pd.Series) -> dict:
         messages = []
         failing_indices = set()
-
+    
         def is_integer_like(x):
             if pd.isna(x):
                 return True
@@ -184,38 +184,40 @@ class IntColumnCheck(ColumnCheck):
             if isinstance(x, float) and x.is_integer():
                 return True
             return False
-
+    
         invalid = series[~series.map(is_integer_like)]
+    
+        # NEW: explicitly check if infinities exist in invalids
+        inf_values = invalid[invalid.map(lambda x: isinstance(x, float) and np.isinf(x))]
+        if not inf_values.empty:
+            messages.append(f"Column '{self.column_name}' contains infinite values.")
+    
         if not invalid.empty:
             sample = list(invalid.unique()[:3])
             messages.append(
                 f"Column '{self.column_name}' contains values that are not integer-like (e.g., decimals or strings): {sample}."
             )
             failing_indices.update(invalid.index)
-
+    
         if invalid.index.equals(series.dropna().index):
             return {"messages": messages, "failing_indices": failing_indices}
-
+    
         valid_series = series.drop(index=invalid.index)
-
-        inf_mask = valid_series.map(lambda x: isinstance(x, float) and np.isinf(x))
-        if inf_mask.any():
-            messages.append(f"Column '{self.column_name}' contains infinite values.")
-            failing_indices.update(valid_series[inf_mask].index)
-
+    
         if self.min is not None:
             mask = valid_series < self.min
             if mask.any():
                 messages.append(f"Column '{self.column_name}' has values less than {self.min}.")
                 failing_indices.update(mask[mask].index)
-
+    
         if self.max is not None:
             mask = valid_series > self.max
             if mask.any():
                 messages.append(f"Column '{self.column_name}' has values greater than {self.max}.")
                 failing_indices.update(mask[mask].index)
-
+    
         return {"messages": messages, "failing_indices": failing_indices}
+
 
 
 class StringColumnCheck(ColumnCheck):
