@@ -8,24 +8,6 @@ from src.frame_check import FrameCheck
 
 class TestFrameCheckDataFrameChecks(unittest.TestCase):
 
-    def test_unique_check_via_framecheck(self):
-        df = pd.DataFrame({'a': [1, 2, 2]})
-        schema = FrameCheck().column('a', type='int').unique(columns=['a'])
-        result = schema.validate(df)
-        self.assertIn('not unique', result.summary().lower())
-
-    def test_not_empty_check_via_framecheck(self):
-        df = pd.DataFrame({'a': [1]})
-        schema = FrameCheck().not_empty()
-        result = schema.validate(df)
-        self.assertTrue(result.is_valid)
-
-    def test_empty_check_via_framecheck(self):
-        df = pd.DataFrame(columns=['a'])
-        schema = FrameCheck().empty()
-        result = schema.validate(df)
-        self.assertTrue(result.is_valid)
-        
     def test_columns_applies_check_to_multiple_fields(self):
         df = pd.DataFrame({
             'age': [25, 18, 85.0],
@@ -36,7 +18,67 @@ class TestFrameCheckDataFrameChecks(unittest.TestCase):
         
         self.assertFalse(result.is_valid)
         self.assertEqual(len(result.errors), 2)
-        self.assertIn('greater than', result.errors[0])
+        self.assertIn('greater than', result.errors[0])    
+        
+    def test_empty_check_via_framecheck(self):
+        df = pd.DataFrame(columns=['a'])
+        schema = FrameCheck().empty()
+        result = schema.validate(df)
+        self.assertTrue(result.is_valid)
+    
+    def test_not_empty_check_via_framecheck(self):
+        df = pd.DataFrame({'a': [1]})
+        schema = FrameCheck().not_empty()
+        result = schema.validate(df)
+        self.assertTrue(result.is_valid)
+        
+    def test_raise_on_error_raises_exception_on_failure(self):
+        df = pd.DataFrame({'score': [0.5, 1.5]})  # 1.5 > 1.0 should fail
+        schema = (
+            FrameCheck()
+            .column('score', type='float', max=1.0)
+            .raise_on_error()
+        )
+        with self.assertRaises(ValueError) as context:
+            schema.validate(df)
+        self.assertIn("FrameCheck validation failed", str(context.exception))
+
+    def test_row_count_argument_validation(self):
+        with self.assertRaises(ValueError) as context:
+            FrameCheck().row_count(5, exact=5)
+        self.assertIn("do not also pass", str(context.exception))
+
+        with self.assertRaises(ValueError) as context:
+            FrameCheck().row_count(5, min=1)
+        self.assertIn("do not also pass", str(context.exception))
+
+        with self.assertRaises(ValueError) as context:
+            FrameCheck().row_count(5, max=10)
+        self.assertIn("do not also pass", str(context.exception))
+
+    def test_row_count_exact_and_bounds(self):
+        df = pd.DataFrame({'a': [1, 2, 3]})
+
+        result_exact_pass = FrameCheck().row_count(3).validate(df)
+        self.assertTrue(result_exact_pass.is_valid)
+
+        result_exact_fail = FrameCheck().row_count(2).validate(df)
+        self.assertFalse(result_exact_fail.is_valid)
+        self.assertIn('exactly 2', result_exact_fail.errors[0])
+
+        result_min_fail = FrameCheck().row_count(min=4).validate(df)
+        self.assertFalse(result_min_fail.is_valid)
+        self.assertIn('at least 4', result_min_fail.errors[0])
+
+        result_max_fail = FrameCheck().row_count(max=2).validate(df)
+        self.assertFalse(result_max_fail.is_valid)
+        self.assertIn('at most 2', result_max_fail.errors[0])
+        
+    def test_unique_check_via_framecheck(self):
+        df = pd.DataFrame({'a': [1, 2, 2]})
+        schema = FrameCheck().column('a', type='int').unique(columns=['a'])
+        result = schema.validate(df)
+        self.assertIn('not unique', result.summary().lower())
 
 
 

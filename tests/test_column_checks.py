@@ -178,19 +178,35 @@ class TestDatetimeColumnCheck(unittest.TestCase):
 
 class TestFloatColumnCheck(unittest.TestCase):
 
-    def test_valid_floats(self):
-        series = pd.Series([0.1, 0.5, 0.99])
+    def test_all_invalid_types_skips_range_and_inf_checks(self):
+        series = pd.Series(['a', 'b', 'c'])
         check = FloatColumnCheck('score')
         result = check.validate(series)
-        self.assertEqual(result['messages'], [])
-        self.assertEqual(result['failing_indices'], set())
+        self.assertTrue(any('not numeric' in m for m in result['messages']))
+        self.assertEqual(len(result['failing_indices']), 3)
+        
+    def test_both_min_and_max(self):
+        series = pd.Series([-1, 0.5, 2])
+        check = FloatColumnCheck('score', min=0.0, max=1.0)
+        result = check.validate(series)
+        self.assertEqual(len(result['messages']), 2)
+        self.assertIn(0, result['failing_indices'])
+        self.assertIn(2, result['failing_indices'])
+        
+    def test_in_set_constraint(self):
+        series = pd.Series([0.1, 0.2, 0.3, 0.5])
+        check = FloatColumnCheck('score', in_set=[0.1, 0.2])
+        result = check.validate(series)
+        self.assertIn("not in allowed set", result['messages'][0])
+        self.assertEqual(result['failing_indices'], {2, 3})
 
-    def test_valid_ints_and_decimals(self):
-        series = pd.Series([1, 2.5, Decimal('3.3')])
+    def test_infinite_values_trigger_warning(self):
+        series = pd.Series([1.0, np.inf, 2.0, -np.inf])
         check = FloatColumnCheck('score')
         result = check.validate(series)
-        self.assertEqual(result['messages'], [])
-        self.assertEqual(result['failing_indices'], set())
+        self.assertTrue(any('infinite values' in m for m in result['messages']))
+        self.assertIn(1, result['failing_indices'])
+        self.assertIn(3, result['failing_indices'])
 
     def test_invalid_types(self):
         series = pd.Series([1.0, 'bad', None])
@@ -213,14 +229,6 @@ class TestFloatColumnCheck(unittest.TestCase):
         self.assertIn("greater than 1.0", result['messages'][0])
         self.assertIn(2, result['failing_indices'])
 
-    def test_both_min_and_max(self):
-        series = pd.Series([-1, 0.5, 2])
-        check = FloatColumnCheck('score', min=0.0, max=1.0)
-        result = check.validate(series)
-        self.assertEqual(len(result['messages']), 2)
-        self.assertIn(0, result['failing_indices'])
-        self.assertIn(2, result['failing_indices'])
-
     def test_nan_values_are_ignored(self):
         series = pd.Series([0.1, np.nan, 0.8])
         check = FloatColumnCheck('score', min=0.0, max=1.0)
@@ -228,35 +236,57 @@ class TestFloatColumnCheck(unittest.TestCase):
         self.assertEqual(result['messages'], [])
         self.assertEqual(result['failing_indices'], set())
         
-    def test_all_invalid_types_skips_range_and_inf_checks(self):
-        series = pd.Series(['a', 'b', 'c'])
+    def test_valid_floats(self):
+        series = pd.Series([0.1, 0.5, 0.99])
         check = FloatColumnCheck('score')
         result = check.validate(series)
-        self.assertTrue(any('not numeric' in m for m in result['messages']))
-        self.assertEqual(len(result['failing_indices']), 3)
+        self.assertEqual(result['messages'], [])
+        self.assertEqual(result['failing_indices'], set())
 
-    def test_infinite_values_trigger_warning(self):
-        series = pd.Series([1.0, np.inf, 2.0, -np.inf])
+    def test_valid_ints_and_decimals(self):
+        series = pd.Series([1, 2.5, Decimal('3.3')])
         check = FloatColumnCheck('score')
         result = check.validate(series)
-        self.assertTrue(any('infinite values' in m for m in result['messages']))
-        self.assertIn(1, result['failing_indices'])
-        self.assertIn(3, result['failing_indices'])
+        self.assertEqual(result['messages'], [])
+        self.assertEqual(result['failing_indices'], set())
 
 
 
 class TestIntColumnCheck(unittest.TestCase):
 
-    def test_valid_integer_values(self):
-        series = pd.Series([1, 2, 3])
+    def test_booleans_are_excluded(self):
+        series = pd.Series([1, True, False])
+        check = IntColumnCheck('col')
+        result = check.validate(series)
+        self.assertEqual(len(result['messages']), 1)
+        self.assertIn(1, result['failing_indices'])
+        self.assertIn(2, result['failing_indices'])
+
+    def test_in_set_constraint(self):
+        series = pd.Series([1, 2, 3, 4])
+        check = IntColumnCheck('col', in_set=[1, 2])
+        result = check.validate(series)
+        self.assertIn("outside allowed set", result['messages'][0])
+        self.assertEqual(result['failing_indices'], {2, 3})
+
+    def test_infinite_values_in_int_column(self):
+        series = pd.Series([1.0, float('inf'), float('-inf')])
+        check = IntColumnCheck('col')
+        result = check.validate(series)
+        self.assertTrue(any('infinite values' in m.lower() for m in result['messages']))
+        self.assertIn(1, result['failing_indices'])
+        self.assertIn(2, result['failing_indices'])
+
+    def test_integer_like_floats_are_accepted(self):
+        series = pd.Series([1.0, 2.0, 3.0])
         check = IntColumnCheck('col')
         result = check.validate(series)
         self.assertEqual(result['messages'], [])
         self.assertEqual(result['failing_indices'], set())
 
-    def test_integer_like_floats_are_accepted(self):
-        series = pd.Series([1.0, 2.0, 3.0])
-        check = IntColumnCheck('col')
+    def test_nan_values_are_ignored(self):
+        series = pd.Series([1, np.nan, 10.0])
+        check = IntColumnCheck('col', min=0, max=100)
         result = check.validate(series)
         self.assertEqual(result['messages'], [])
         self.assertEqual(result['failing_indices'], set())
@@ -269,20 +299,6 @@ class TestIntColumnCheck(unittest.TestCase):
         self.assertIn(1, result['failing_indices'])
         self.assertIn(2, result['failing_indices'])
 
-    def test_range_check_min(self):
-        series = pd.Series([10, 5, 20])
-        check = IntColumnCheck('col', min=6)
-        result = check.validate(series)
-        self.assertIn("less than 6", result['messages'][0])
-        self.assertIn(1, result['failing_indices'])
-
-    def test_range_check_max(self):
-        series = pd.Series([10, 25, 20])
-        check = IntColumnCheck('col', max=20)
-        result = check.validate(series)
-        self.assertIn("greater than 20", result['messages'][0])
-        self.assertIn(1, result['failing_indices'])
-
     def test_range_check_both_min_and_max(self):
         series = pd.Series([1, 10, 30])
         check = IntColumnCheck('col', min=5, max=25)
@@ -291,28 +307,27 @@ class TestIntColumnCheck(unittest.TestCase):
         self.assertIn(0, result['failing_indices'])
         self.assertIn(2, result['failing_indices'])
 
-    def test_nan_values_are_ignored(self):
-        series = pd.Series([1, np.nan, 10.0])
-        check = IntColumnCheck('col', min=0, max=100)
+    def test_range_check_max(self):
+        series = pd.Series([10, 25, 20])
+        check = IntColumnCheck('col', max=20)
+        result = check.validate(series)
+        self.assertIn("greater than 20", result['messages'][0])
+        self.assertIn(1, result['failing_indices'])
+
+    def test_range_check_min(self):
+        series = pd.Series([10, 5, 20])
+        check = IntColumnCheck('col', min=6)
+        result = check.validate(series)
+        self.assertIn("less than 6", result['messages'][0])
+        self.assertIn(1, result['failing_indices'])
+
+    def test_valid_integer_values(self):
+        series = pd.Series([1, 2, 3])
+        check = IntColumnCheck('col')
         result = check.validate(series)
         self.assertEqual(result['messages'], [])
         self.assertEqual(result['failing_indices'], set())
 
-    def test_booleans_are_excluded(self):
-        series = pd.Series([1, True, False])
-        check = IntColumnCheck('col')
-        result = check.validate(series)
-        self.assertEqual(len(result['messages']), 1)
-        self.assertIn(1, result['failing_indices'])
-        self.assertIn(2, result['failing_indices'])
-        
-    def test_infinite_values_in_int_column(self):
-        series = pd.Series([1.0, float('inf'), float('-inf')])
-        check = IntColumnCheck('col')
-        result = check.validate(series)
-        self.assertTrue(any('infinite values' in m.lower() for m in result['messages']))
-        self.assertIn(1, result['failing_indices'])
-        self.assertIn(2, result['failing_indices'])
 
 
 class TestStringColumnCheck(unittest.TestCase):

@@ -43,3 +43,23 @@ class TestCheckFactory(unittest.TestCase):
         check_types = {type(c) for c in checks}
         self.assertIn(MaxCheck, check_types)
         self.assertIn(RequiredCheck, check_types)
+        
+    def test_raises_on_unknown_check_type(self):
+        with self.assertRaises(ValueError) as context:
+            CheckFactory.create(
+                'nonexistent_check',
+                column_name='score',
+                raise_on_fail=True
+            )
+        self.assertIn("Unknown column type", str(context.exception))
+
+    def test_raises_on_invalid_kwargs(self):
+        with self.assertRaises(ValueError) as context:
+            CheckFactory.create(
+                'max_check',
+                column_name='score',
+                raise_on_fail=True,
+                invalid_kwarg=True
+            )
+        self.assertIn("Invalid keyword arguments", str(context.exception))
+

@@ -244,7 +244,6 @@ class IntColumnCheck(ColumnCheck):
                 messages.append(f"Column '{self.column_name}' has values outside allowed set {self.in_set}.")
                 failing_indices.update(mask[mask].index)
 
-    
         return {"messages": messages, "failing_indices": failing_indices}
 
 

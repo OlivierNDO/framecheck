@@ -5,21 +5,22 @@ from typing import Union, List, Set, Optional, Dict, Any, Literal
 import warnings
 
 from .column_checks import (
-    IntColumnCheck,
-    FloatColumnCheck,
-    StringColumnCheck,
     BoolColumnCheck,
     DatetimeColumnCheck,
     CustomFunctionCheck,
-    ColumnExistsCheck
+    ColumnExistsCheck,
+    FloatColumnCheck,
+    IntColumnCheck,
+    StringColumnCheck
 )
 
 from .dataframe_checks import (
     DataFrameCheck,
-    UniquenessCheck,
     DefinedColumnsOnlyCheck,
     IsEmptyCheck,
-    NotEmptyCheck
+    NotEmptyCheck,
+    RowCountCheck,
+    UniquenessCheck
     
 )
 
@@ -168,14 +169,39 @@ class FrameCheck:
         if self._show_warnings and error_messages:
             full_message = "\n".join(f"- {msg}" for msg in error_messages)
             warnings.warn(f"FrameCheck validation errors:\n{full_message}", FrameCheckWarning, stacklevel=3)
+
+    def empty(self) -> 'FrameCheck':
+        self._dataframe_checks.append(IsEmptyCheck())
+        return self
+    
+    def not_empty(self) -> 'FrameCheck':
+        self._dataframe_checks.append(NotEmptyCheck())
+        return self
+    
+    def only_defined_columns(self) -> 'FrameCheck':
+        self._finalized = True
+        return self
     
     def raise_on_error(self) -> 'FrameCheck':
         self._raise_on_error = True
         return self
-
-    def only_defined_columns(self) -> 'FrameCheck':
-        self._finalized = True
+    
+    def row_count(self, n: Optional[int] = None, *, exact: Optional[int] = None,
+                  min: Optional[int] = None, max: Optional[int] = None,
+                  warn_only: bool = False) -> 'FrameCheck':
+        if n is not None:
+            if exact is not None or min is not None or max is not None:
+                raise ValueError("If using row_count(n), do not also pass 'exact', 'min', or 'max'")
+            exact = n
+        self._dataframe_checks.append(
+            RowCountCheck(exact=exact, min=min, max=max, raise_on_fail=not warn_only)
+        )
         return self
+    
+    def unique(self, columns: Optional[List[str]] = None) -> 'FrameCheck':
+        self._dataframe_checks.append(UniquenessCheck(columns=columns))
+        return self
+
 
     def column(self, name: str, **kwargs) -> 'FrameCheck':
         if self._finalized:
@@ -208,17 +234,6 @@ class FrameCheck:
             self.column(name, **kwargs)
         return self
 
-    def unique(self, columns: Optional[List[str]] = None) -> 'FrameCheck':
-        self._dataframe_checks.append(UniquenessCheck(columns=columns))
-        return self
-
-    def empty(self) -> 'FrameCheck':
-        self._dataframe_checks.append(IsEmptyCheck())
-        return self
-
-    def not_empty(self) -> 'FrameCheck':
-        self._dataframe_checks.append(NotEmptyCheck())
-        return self
 
     def validate(self, df: pd.DataFrame) -> ValidationResult:
         if self._finalized:

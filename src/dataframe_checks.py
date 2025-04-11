@@ -91,3 +91,41 @@ class UniquenessCheck(DataFrameCheck):
                 failing_indices.update(duplicates.index)
 
         return {"messages": messages, "failing_indices": failing_indices}
+
+
+class RowCountCheck(DataFrameCheck):
+    def __init__(
+        self,
+        exact: Optional[int] = None,
+        min: Optional[int] = None,
+        max: Optional[int] = None,
+        raise_on_fail: bool = True
+    ):
+        super().__init__(raise_on_fail)
+        self.exact = exact
+        self.min = min
+        self.max = max
+
+        if self.exact is not None and (self.min is not None or self.max is not None):
+            raise ValueError("Specify either 'exact' OR 'min'/'max', not both.")
+
+    def validate(self, df: pd.DataFrame) -> dict:
+        messages = []
+        row_count = len(df)
+
+        if self.exact is not None and row_count != self.exact:
+            messages.append(
+                f"DataFrame must have exactly {self.exact} rows (found {row_count})."
+            )
+
+        if self.min is not None and row_count < self.min:
+            messages.append(
+                f"DataFrame must have at least {self.min} rows (found {row_count})."
+            )
+
+        if self.max is not None and row_count > self.max:
+            messages.append(
+                f"DataFrame must have at most {self.max} rows (found {row_count})."
+            )
+
+        return {"messages": messages, "failing_indices": set()}
