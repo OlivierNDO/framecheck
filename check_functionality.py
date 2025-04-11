@@ -44,21 +44,21 @@ validation_result = validator.validate(df)
 
 ### Example 2
 df = pd.DataFrame({
-    'id': ['a123', 'b456', 'c789'],
-    'good_credit': [0, 1, 0],
-    'home_owner': [1, 1, 0],
-    'promo_eligible': [0, 0, 1],
-    'score': [0.9, 0.5, 1.2],
-    'email': ['x@example.com', 'bad', 'z@example.com'],
+    'a': [0, 1, 0, 1, 2],
+    'b': [1, 1, 0, 0, 3],
+    'timestamp': ['2022-01-01', '2022-01-02', '2019-12-31', '2021-01-01', '2023-05-01'],
+    'email': ['a@example.com', 'bad', 'b@example.com', 'not-an-email', 'c@example.com'],
+    'extra': ['x'] * 5
 })
+
 
 validator = (
     FrameCheck()
-    .columns(['good_credit', 'home_owner', 'promo_eligible'], type = 'int', in_set = [0, 1])
-    .column('score', type='float', min=0.0, max=1.0)
-    .column('email', type='string', regex=r'.+@.+\..+', warn_only = True)
-    .unique(columns = ['id'])
-    .row_count(2)
+    .columns(['a', 'b'], type='int', in_set=[0, 1])
+    .column('timestamp', type='datetime', after='2020-01-01')
+    .column('email', type='string', regex=r'.+@.+\..+', warn_only=True)
+    .only_defined_columns()
+    .row_count(min=5, max=100)
     .not_empty()
     .raise_on_error()
 )
@@ -73,30 +73,24 @@ result = validator.validate(df)
 
 
 
+import great_expectations as ge
 
-errors = []
+ge_df = ge.from_pandas(df)
+ge_df.expect_column_values_to_be_in_set('a', [0, 1])
+ge_df.expect_column_values_to_be_of_type('a', 'int64')
+ge_df.expect_column_values_to_be_in_set('b', [0, 1])
+ge_df.expect_column_values_to_be_of_type('b', 'int64')
+ge_df['timestamp'] = pd.to_datetime(ge_df['timestamp'])
+ge_df.expect_column_values_to_be_of_type('timestamp', 'datetime64[ns]')
+ge_df.expect_column_values_to_be_between('timestamp', min_value='2020-01-01')
+ge_df.expect_column_values_to_match_regex('email', r'.+@.+\..+', mostly=1.0)
+ge_df.expect_table_row_count_to_be_between(min_value=5, max_value=100)
+ge_df.expect_table_row_count_to_be_greater_than(0)
+expected_columns = {'a', 'b', 'timestamp', 'email'}
+unexpected = set(df.columns) - expected_columns
+if unexpected:
+    raise ValueError(f"Unexpected columns in DataFrame: {unexpected}")
 
-if df.empty: errors.append("DataFrame is empty.")
-expected_cols = {'id', 'age', 'good_credit', 'home_owner', 'promo_eligible', 'score', 'email'}
-extra = set(df.columns) - expected_cols
-if extra: errors.append(f"Unexpected columns: {sorted(extra)}")
-
-for col in ['good_credit', 'home_owner', 'promo_eligible']:
-    if not df[col].isin([0, 1]).all():
-        errors.append(f"Column '{col}' contains values outside [0, 1].")
-
-if not df['id'].str.match(r'^[a-z0-9]+$').all():
-    errors.append("Column 'id' contains invalid strings.")
-
-if (df['age'] < 18).any(): errors.append("Column 'age' has values < 18.")
-if (df['age'] > 99).any(): errors.append("Column 'age' has values > 99.")
-
-if (df['score'] < 0).any(): errors.append("Column 'score' has values < 0.")
-if (df['score'] > 1).any(): errors.append("Column 'score' has values > 1.")
-
-# Warning only: email regex
-bad_email = ~df['email'].str.contains(r'.+@.+\..+', regex=True)
-if bad_email.any(): print("Warning: Some emails are invalid:", df['email'][bad_email].tolist())
-
-if errors:
-    raise ValueError("Validation failed:\n" + "\n".join(errors))
+results = ge_df.validate()
+if not results['success']:
+    raise ValueError(f"Validation failed: {results}")
