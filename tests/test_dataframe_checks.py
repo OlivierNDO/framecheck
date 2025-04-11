@@ -3,6 +3,7 @@ import pandas as pd
 from src.dataframe_checks import (
     DefinedColumnsOnlyCheck, 
     IsEmptyCheck,
+    NoNullsCheck,
     NotEmptyCheck,
     UniquenessCheck
 )
@@ -21,6 +22,37 @@ class TestNotEmptyCheck(unittest.TestCase):
         result = check.validate(df)
         self.assertTrue(result['messages'])
         self.assertIn('DataFrame is unexpectedly empty.', result['messages'][0])
+        self.assertEqual(result['failing_indices'], set())
+
+
+
+class TestNoNullsCheck(unittest.TestCase):
+    def setUp(self):
+        self.df = pd.DataFrame({
+            'a': [1, 2, None],
+            'b': ['x', 'y', 'z'],
+            'c': [None, None, 3]
+        })
+
+    def test_default_all_columns(self):
+        check = NoNullsCheck()
+        result = check.validate(self.df)
+        self.assertIn("Column 'a' contains null values.", result['messages'])
+        self.assertIn("Column 'c' contains null values.", result['messages'])
+        self.assertEqual(result['failing_indices'], {0, 1, 2})
+
+    def test_specified_columns(self):
+        check = NoNullsCheck(columns=['a'])
+        result = check.validate(self.df)
+        self.assertEqual(len(result['messages']), 1)
+        self.assertIn("Column 'a' contains null values.", result['messages'])
+        self.assertEqual(result['failing_indices'], {2})
+
+    def test_no_nulls(self):
+        clean_df = pd.DataFrame({'x': [1, 2], 'y': ['a', 'b']})
+        check = NoNullsCheck()
+        result = check.validate(clean_df)
+        self.assertEqual(result['messages'], [])
         self.assertEqual(result['failing_indices'], set())
 
 

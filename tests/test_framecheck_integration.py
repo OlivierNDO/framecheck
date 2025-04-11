@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 import pandas as pd
 import numpy as np
 from decimal import Decimal
@@ -9,19 +10,19 @@ class TestFrameCheckDataFrameChecks(unittest.TestCase):
 
     def test_unique_check_via_framecheck(self):
         df = pd.DataFrame({'a': [1, 2, 2]})
-        schema = FrameCheck().column('a', type='int').unique(columns=['a']).build()
+        schema = FrameCheck().column('a', type='int').unique(columns=['a'])
         result = schema.validate(df)
         self.assertIn('not unique', result.summary().lower())
 
     def test_not_empty_check_via_framecheck(self):
         df = pd.DataFrame({'a': [1]})
-        schema = FrameCheck().not_empty().build()
+        schema = FrameCheck().not_empty()
         result = schema.validate(df)
         self.assertTrue(result.is_valid)
 
     def test_empty_check_via_framecheck(self):
         df = pd.DataFrame(columns=['a'])
-        schema = FrameCheck().empty().build()
+        schema = FrameCheck().empty()
         result = schema.validate(df)
         self.assertTrue(result.is_valid)
         
@@ -30,7 +31,7 @@ class TestFrameCheckDataFrameChecks(unittest.TestCase):
             'age': [25, 18, 85.0],
             'score': [32, 50, 75]
         })
-        schema = FrameCheck().columns(['age', 'score'], type='float', max=70).build()
+        schema = FrameCheck().columns(['age', 'score'], type='float', max=70)
         result = schema.validate(df)
         
         self.assertFalse(result.is_valid)
@@ -49,7 +50,7 @@ class TestMultipleChecksSameColumn(unittest.TestCase):
             FrameCheck()
             .column('score', type='float', min=0.2)
             .column('score', type='float', max=0.55, warn_only=True)
-            .build()
+            
         )
         result = schema.validate(df)
         self.assertEqual(len(result.errors), 1)
@@ -62,7 +63,7 @@ class TestMultipleChecksSameColumn(unittest.TestCase):
             FrameCheck()
             .column('score', type='float', min=0.0)
             .column('score', type='float', min=0.0)
-            .build()
+            
         )
         result = schema.validate(df)
         self.assertTrue(result.is_valid)
@@ -74,7 +75,7 @@ class TestMultipleChecksSameColumn(unittest.TestCase):
             FrameCheck()
             .column('score', type='float', min=0.0)
             .column('score', type='float', max=0.8, warn_only=True)
-            .build()
+            
         )
         result = schema.validate(df)
         self.assertEqual(len(result.errors), 1)
@@ -91,7 +92,7 @@ class TestComplexValidationChains(unittest.TestCase):
             FrameCheck()
             .column('email', type='string', in_set=['a@example.com', 'x@x.com'])
             .column('email', type='string', regex=r'.+@.+\\..+')
-            .build()
+            
         )
         result = schema.validate(df)
         self.assertEqual(len(result.errors), 2)
@@ -103,11 +104,12 @@ class TestComplexValidationChains(unittest.TestCase):
             FrameCheck()
             .column('score', type='float', max=0.7)
             .column('score', function=lambda x: x != 0.6, description='No 0.6')
-            .build()
+            
         )
         result = schema.validate(df)
         self.assertEqual(len(result.errors), 1)
         self.assertIn('No 0.6', result.errors[0])
+
 
 
 class TestGeneralFrameCheckBehavior(unittest.TestCase):
@@ -120,7 +122,7 @@ class TestGeneralFrameCheckBehavior(unittest.TestCase):
             FrameCheck()
             .column('a', type='int')
             .only_defined_columns()
-            .build()
+            
         )
         result = schema.validate(df)
         self.assertIn('Unexpected columns', result.summary())
@@ -134,7 +136,7 @@ class TestGeneralFrameCheckBehavior(unittest.TestCase):
     def test_missing_column_with_exists_check(self):
         """Missing column produces friendly message."""
         df = pd.DataFrame({'a': [1]})
-        schema = FrameCheck().column('b').build()
+        schema = FrameCheck().column('b')
         result = schema.validate(df)
         self.assertIn("'b'", result.summary())
 
@@ -150,7 +152,7 @@ class TestGeneralFrameCheckBehavior(unittest.TestCase):
             .column('a', type='int')
             .column('b', type='float')
             .column('c', type='string')
-            .build()
+            
         )
         result = schema.validate(df)
         self.assertTrue(result.is_valid)

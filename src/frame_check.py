@@ -1,5 +1,8 @@
+import sys
+import logging
 import pandas as pd
-from typing import Union, List, Set, Optional, Dict, Any
+from typing import Union, List, Set, Optional, Dict, Any, Literal
+import warnings
 
 from .column_checks import (
     IntColumnCheck,
@@ -21,6 +24,17 @@ from .dataframe_checks import (
 )
 
 from src.utilities import CheckFactory
+
+
+
+
+
+class FrameCheckWarning(UserWarning):
+    """Custom warning type for FrameCheck validation warnings."""
+    pass
+
+
+
 
 class ValidationResult:
     def __init__(
@@ -78,6 +92,8 @@ class ValidationResult:
         }
 
 
+
+
 class Schema:
     def __init__(self, column_checks: List, dataframe_checks: List):
         self.column_checks = column_checks
@@ -85,7 +101,7 @@ class Schema:
 
     def validate(self, df: pd.DataFrame, verbose: bool = False) -> ValidationResult:
         errors = []
-        warnings = []
+        warnings_list = []
         failing_indices = set()
         error_indices = set()
 
@@ -97,7 +113,7 @@ class Schema:
                     if check.__class__.__name__ == "ColumnExistsCheck"
                     else f"Column '{check.column_name}' does not exist in DataFrame."
                 )
-                (errors if check.raise_on_fail else warnings).append(msg)
+                (errors if check.raise_on_fail else warnings_list).append(msg)
                 continue
 
             result = check.validate(df[check.column_name])
@@ -105,13 +121,13 @@ class Schema:
                 raise TypeError(
                     f"Validation check for column '{check.column_name}' did not return a dict. Got: {type(result)}"
                 )
-                        
+
             if result.get("messages"):
                 if check.raise_on_fail:
                     errors.extend(result["messages"])
                     error_indices.update(result["failing_indices"])
                 else:
-                    warnings.extend(result["messages"])
+                    warnings_list.extend(result["messages"])
                 failing_indices.update(result["failing_indices"])
 
         # DataFrame-level checks
@@ -122,55 +138,80 @@ class Schema:
                     errors.extend(result["messages"])
                     error_indices.update(result["failing_indices"])
                 else:
-                    warnings.extend(result["messages"])
+                    warnings_list.extend(result["messages"])
                 failing_indices.update(result["failing_indices"])
 
-        result = ValidationResult(errors=errors, warnings=warnings, failing_row_indices=failing_indices)
+        # Emit warnings if any
+        for msg in warnings_list:
+            warnings.warn(msg, FrameCheckWarning)
+
+        result = ValidationResult(errors=errors, warnings=warnings_list, failing_row_indices=failing_indices)
         result._error_indices = error_indices
         return result
 
 
-
 class FrameCheck:
-    def __init__(self):
+    def __init__(self, log_errors: bool = True):
         self._column_checks = []
         self._dataframe_checks = []
         self._finalized = False
+        self._show_warnings = log_errors
+        self._raise_on_error = False
+        warnings.simplefilter('always', FrameCheckWarning)
+
+    def _emit_warnings(self, warning_messages: List[str]):
+        if warning_messages:
+            full_message = "\n".join(f"- {msg}" for msg in warning_messages)
+            warnings.warn(f"FrameCheck validation warnings:\n{full_message}", FrameCheckWarning, stacklevel=3)
+    
+    def _emit_errors(self, error_messages: List[str]):
+        if self._show_warnings and error_messages:
+            full_message = "\n".join(f"- {msg}" for msg in error_messages)
+            warnings.warn(f"FrameCheck validation errors:\n{full_message}", FrameCheckWarning, stacklevel=3)
+    
+    def raise_on_error(self) -> 'FrameCheck':
+        self._raise_on_error = True
+        return self
 
     def only_defined_columns(self) -> 'FrameCheck':
         self._finalized = True
         return self
 
-
     def column(self, name: str, **kwargs) -> 'FrameCheck':
         if self._finalized:
             raise RuntimeError("Cannot call .column() after .only_defined_columns()")
-    
         col_type = kwargs.pop('type', None)
         raise_on_fail = not kwargs.pop('warn_only', False)
-    
         if col_type is None and not kwargs:
             self._column_checks.append(ColumnExistsCheck(name, raise_on_fail))
             return self
-    
+        
         if 'function' in kwargs:
-            self._column_checks.append(CustomFunctionCheck(column_name=name, raise_on_fail=raise_on_fail, **kwargs))
+            self._column_checks.append(CustomFunctionCheck(
+                column_name=name,
+                function=kwargs['function'],
+                description=kwargs.get('description', ''),
+                raise_on_fail=raise_on_fail
+            ))
             return self
-    
-        self._column_checks.append(CheckFactory.create(col_type, name, raise_on_fail, **kwargs))
+        
+        checks = CheckFactory.create(
+            col_type, column_name=name, raise_on_fail=raise_on_fail, **kwargs
+        )
+        if not isinstance(checks, list):
+            checks = [checks]
+        self._column_checks.extend(checks)
         return self
 
-    
     def columns(self, names: List[str], **kwargs) -> 'FrameCheck':
         for name in names:
             self.column(name, **kwargs)
         return self
 
-
     def unique(self, columns: Optional[List[str]] = None) -> 'FrameCheck':
         self._dataframe_checks.append(UniquenessCheck(columns=columns))
         return self
-    
+
     def empty(self) -> 'FrameCheck':
         self._dataframe_checks.append(IsEmptyCheck())
         return self
@@ -178,10 +219,50 @@ class FrameCheck:
     def not_empty(self) -> 'FrameCheck':
         self._dataframe_checks.append(NotEmptyCheck())
         return self
-    
 
-    def build(self) -> Schema:
+    def validate(self, df: pd.DataFrame) -> ValidationResult:
         if self._finalized:
             expected_cols = [check.column_name for check in self._column_checks if hasattr(check, 'column_name')]
             self._dataframe_checks.append(DefinedColumnsOnlyCheck(expected_columns=expected_cols))
-        return Schema(self._column_checks, self._dataframe_checks)
+
+        errors = []
+        warnings_list = []
+        failing_indices = set()
+        error_indices = set()
+
+        for check in self._column_checks:
+            if check.column_name not in df.columns:
+                msg = f"Column '{check.column_name}' is missing."
+                (errors if check.raise_on_fail else warnings_list).append(msg)
+                continue
+            result = check.validate(df[check.column_name])
+            if result.get("messages"):
+                if check.raise_on_fail:
+                    errors.extend(result["messages"])
+                    error_indices.update(result["failing_indices"])
+                else:
+                    warnings_list.extend(result["messages"])
+                failing_indices.update(result["failing_indices"])
+
+        for df_check in self._dataframe_checks:
+            result = df_check.validate(df)
+            if result.get("messages"):
+                if df_check.raise_on_fail:
+                    errors.extend(result["messages"])
+                    error_indices.update(result["failing_indices"])
+                else:
+                    warnings_list.extend(result["messages"])
+                failing_indices.update(result["failing_indices"])
+
+        # Emit to user
+        self._emit_warnings(warnings_list)
+        
+
+        result = ValidationResult(errors=errors, warnings=warnings_list, failing_row_indices=failing_indices)
+        result._error_indices = error_indices
+        
+        if self._raise_on_error and errors:
+            raise ValueError("FrameCheck validation failed:\n" + "\n".join(errors))
+        else:
+            self._emit_errors(errors)
+        return result

@@ -123,10 +123,18 @@ class DatetimeColumnCheck(ColumnCheck):
 
 @CheckFactory.register('float')
 class FloatColumnCheck(ColumnCheck):
-    def __init__(self, column_name: str, min: Optional[float] = None, max: Optional[float] = None, raise_on_fail: bool = True):
+    def __init__(
+        self,
+        column_name: str,
+        min: Optional[float] = None,
+        max: Optional[float] = None,
+        in_set: Optional[List[float]] = None,
+        raise_on_fail: bool = True
+    ):
         super().__init__(column_name, raise_on_fail)
         self.min = min
         self.max = max
+        self.in_set = in_set
 
     def validate(self, series: pd.Series) -> dict:
         messages = []
@@ -146,6 +154,13 @@ class FloatColumnCheck(ColumnCheck):
             return {"messages": messages, "failing_indices": failing_indices}
 
         numeric_series = series.drop(index=non_float_like.index)
+
+        if self.in_set is not None:
+            mask = ~numeric_series.isin(self.in_set)
+            if mask.any():
+                bad_values = list(numeric_series[mask].unique()[:3])
+                messages.append(f"Column '{self.column_name}' contains values not in allowed set: {bad_values}.")
+                failing_indices.update(mask[mask].index)
 
         inf_mask = numeric_series.map(lambda x: isinstance(x, float) and np.isinf(x))
         if inf_mask.any():
@@ -167,12 +182,15 @@ class FloatColumnCheck(ColumnCheck):
         return {"messages": messages, "failing_indices": failing_indices}
 
 
+
 @CheckFactory.register('int')
 class IntColumnCheck(ColumnCheck):
-    def __init__(self, column_name: str, min: Optional[int] = None, max: Optional[int] = None, raise_on_fail: bool = True):
+    def __init__(self, column_name: str, min: Optional[int] = None, max: Optional[int] = None, in_set: Optional[List[int]] = None, raise_on_fail: bool = True):
         super().__init__(column_name, raise_on_fail)
         self.min = min
         self.max = max
+        self.in_set = in_set
+
 
     def validate(self, series: pd.Series) -> dict:
         messages = []
@@ -219,6 +237,13 @@ class IntColumnCheck(ColumnCheck):
             if mask.any():
                 messages.append(f"Column '{self.column_name}' has values greater than {self.max}.")
                 failing_indices.update(mask[mask].index)
+                
+        if self.in_set is not None:
+            mask = ~valid_series.isin(self.in_set)
+            if mask.any():
+                messages.append(f"Column '{self.column_name}' has values outside allowed set {self.in_set}.")
+                failing_indices.update(mask[mask].index)
+
     
         return {"messages": messages, "failing_indices": failing_indices}
 
