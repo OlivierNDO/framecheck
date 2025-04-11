@@ -87,7 +87,11 @@ DataFrame must have at least 5 rows (found 3).
 Unexpected columns in DataFrame: ['good_credit', 'home_owner', 'id', 'promo_eligible', 'score']
 ```
 
-Equivalent code in [great_expectations](https://docs.greatexpectations.io/):
+Equivalent code in [great_expectations](https://docs.greatexpectations.io/)
+(which is a fantastic package with a much broader focus than FrameCheck).
+
+
+:
 :
 ```python
 import great_expectations as ge
