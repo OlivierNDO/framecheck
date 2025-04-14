@@ -29,23 +29,22 @@ pip install framecheck
 
 ## Table of Contents
 
-- [Getting Started](#-example-catch-data-issues-before-they-cause-bugs)
-- [Output](#-output)
-- [Comparison with Other Approaches](#equivalent-code-in-greatexpectations)
-    - [great_expectations](#equivalent-code-in-greatexpectations)
-    - [Manual Validation](#equivalent-code-without-a-package)
+- [Getting Started](#example-catch-data-issues-before-they-cause-bugs)
+- [Output](#output)
+- [Comparison with Other Approaches](#comparison-with-other-approaches)
+  - [great_expectations](#equivalent-code-in-greatexpectations)
+  - [Manual Validation](#equivalent-code-without-a-package)
 - [FrameCheck Methods](#framecheck-methods)
-    - [column(...)](#column)
-    - [columns(...)](#columns)
-    - [columns_are(...)](#columns-are)
-    - [empty()](#empty)
-    - [not_empty()](#not-empty)
-    - [only_defined_columns()](#only-defined-columns)
-    - [row_count(...)](#row-count)
-    - [unique(...)](#unique)
+  - [.column(...)](#column--core-behaviors)
+  - [.columns(...)](#columns)
+  - [.columns_are(...)](#columns_are)
+  - [.empty()](#empty)
+  - [.not_empty()](#not_empty)
+  - [.only_defined_columns()](#only_defined_columns)
+  - [.row_count(...)](#row_count)
+  - [.unique(...)](#unique)
 - [License](#license)
 - [Contact](#contact)
-
 
 
 ---
