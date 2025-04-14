@@ -17,6 +17,7 @@ from framecheck.column_checks import (
 from framecheck.dataframe_checks import (
     DataFrameCheck,
     DefinedColumnsOnlyCheck,
+    ExactColumnsCheck,
     IsEmptyCheck,
     NotEmptyCheck,
     RowCountCheck,
@@ -232,6 +233,9 @@ class FrameCheck:
             self.column(name, **kwargs)
         return self
 
+    def columns_are(self, expected_columns: List[str], warn_only: bool = False) -> 'FrameCheck':
+        self.df_checks.append(ExactColumnsCheck(expected_columns, raise_on_fail=not warn_only))
+        return self
 
     def validate(self, df: pd.DataFrame) -> ValidationResult:
         if self._finalized:
@@ -270,7 +274,6 @@ class FrameCheck:
         # Emit to user
         self._emit_warnings(warnings_list)
         
-
         result = ValidationResult(errors=errors, warnings=warnings_list, failing_row_indices=failing_indices)
         result._error_indices = error_indices
         

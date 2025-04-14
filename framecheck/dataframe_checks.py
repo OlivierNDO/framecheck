@@ -25,6 +25,37 @@ class DefinedColumnsOnlyCheck(DataFrameCheck):
         return {"messages": messages, "failing_indices": set()}
 
 
+class ExactColumnsCheck(DataFrameCheck):
+    def __init__(self, expected_columns: List[str], raise_on_fail: bool = True):
+        super().__init__(raise_on_fail)
+        self.expected_columns = expected_columns
+
+    def validate(self, df: pd.DataFrame) -> dict:
+        actual_columns = list(df.columns)
+        messages = []
+        failing_indices = set()
+
+        expected_set = set(self.expected_columns)
+        actual_set = set(actual_columns)
+
+        missing = expected_set - actual_set
+        extra = actual_set - expected_set
+
+        if missing:
+            messages.append(f"Missing column(s): {sorted(missing)}.")
+
+        if extra:
+            messages.append(f"Unexpected column(s): {sorted(extra)}.")
+
+        if not missing and not extra and actual_columns != self.expected_columns:
+            messages.append(
+                f"Column order mismatch: expected {self.expected_columns}, "
+                f"but got {actual_columns}."
+            )
+
+        return {"messages": messages, "failing_indices": failing_indices}
+
+
 class NotEmptyCheck(DataFrameCheck):
     def __init__(self, raise_on_fail: bool = True):
         super().__init__(raise_on_fail)

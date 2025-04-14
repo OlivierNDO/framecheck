@@ -2,6 +2,7 @@ import unittest
 import pandas as pd
 from framecheck.dataframe_checks import (
     DefinedColumnsOnlyCheck, 
+    ExactColumnsCheck,
     IsEmptyCheck,
     NoNullsCheck,
     NotEmptyCheck,
@@ -25,6 +26,52 @@ class TestDefinedColumnsOnlyCheck(unittest.TestCase):
         self.assertIn("Unexpected columns", result['messages'][0])
         self.assertEqual(result['failing_indices'], set())
 
+
+class TestExactColumnsCheck(unittest.TestCase):
+
+    def setUp(self):
+        self.expected = ['a', 'b', 'c']
+
+    def test_passes_when_columns_match_exactly(self):
+        df = pd.DataFrame(columns=['a', 'b', 'c'])
+        check = ExactColumnsCheck(expected_columns=self.expected)
+        result = check.validate(df)
+        self.assertEqual(result['messages'], [])
+        self.assertEqual(result['failing_indices'], set())
+
+    def test_missing_columns(self):
+        df = pd.DataFrame(columns=['a', 'b'])
+        check = ExactColumnsCheck(expected_columns=self.expected)
+        result = check.validate(df)
+        self.assertIn("Missing column(s): ['c'].", result['messages'])
+        self.assertNotIn("Unexpected column(s", result['messages'][0])
+        self.assertEqual(result['failing_indices'], set())
+
+    def test_extra_columns(self):
+        df = pd.DataFrame(columns=['a', 'b', 'c', 'd'])
+        check = ExactColumnsCheck(expected_columns=self.expected)
+        result = check.validate(df)
+        self.assertIn("Unexpected column(s): ['d'].", result['messages'])
+        self.assertEqual(result['failing_indices'], set())
+
+    def test_missing_and_extra_columns(self):
+        df = pd.DataFrame(columns=['a', 'x'])
+        check = ExactColumnsCheck(expected_columns=self.expected)
+        result = check.validate(df)
+        self.assertIn("Missing column(s): ['b', 'c'].", result['messages'])
+        self.assertIn("Unexpected column(s): ['x'].", result['messages'])
+        self.assertEqual(result['failing_indices'], set())
+
+    def test_order_mismatch_only(self):
+        df = pd.DataFrame(columns=['b', 'a', 'c'])
+        check = ExactColumnsCheck(expected_columns=self.expected)
+        result = check.validate(df)
+        self.assertEqual(
+            result['messages'],
+            ["Column order mismatch: expected ['a', 'b', 'c'], but got ['b', 'a', 'c']."]
+        )
+        self.assertEqual(result['failing_indices'], set())
+        
 
 class TestNoNullsCheck(unittest.TestCase):
     def setUp(self):
