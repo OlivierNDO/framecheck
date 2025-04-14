@@ -37,14 +37,15 @@ pip install framecheck
 - [FrameCheck Methods](#framecheck-methods)
   - [.column(...)](#column--core-behaviors)
   - [.columns(...)](#columns)
-  - [.columns_are(...)](#columns_are---exact-column-names-and-order)
-  - [.empty()](#empty---ensure-the-dataframe-is-empty)
-  - [.not_empty()](#not_empty---ensure-the-dataframe-is-not-empty)
-  - [.only_defined_columns()](#only_defined_columns---no-extraunexpected-columns-allowed)
-  - [.row_count(...)](#row_count---validate-the-number-of-rows)
-  - [.unique(...)](#unique---rows-must-be-unique)
+  - [.columns_are(...)](#columns_are--exact-column-names-and-order)
+  - [.empty()](#empty--ensure-the-dataframe-is-empty)
+  - [.not_empty()](#not_empty--ensure-the-dataframe-is-not-empty)
+  - [.only_defined_columns()](#only_defined_columns--no-extraunexpected-columns-allowed)
+  - [.row_count(...)](#row_count--validate-the-number-of-rows)
+  - [.unique(...)](#unique--rows-must-be-unique)
 - [License](#license)
 - [Contact](#contact)
+
 
 
 
@@ -202,7 +203,7 @@ import pandas as pd
 from framecheck import FrameCheck
 ```
 
-### `.column(...)` – Core Behaviors
+### column(...) – Core Behaviors
 
 #### ✅ Ensures column exists
 ```python
@@ -304,7 +305,7 @@ FrameCheck validation errors:
 ```
 
 
-### `columns(...)`
+### columns(...)
 
 Any .column() operation can be applied to multiple columns of the same type.
 
@@ -428,7 +429,7 @@ FrameCheck validation errors:
 DataFrame must have exactly 2 rows (found 3).
 ```
 
-### unique() – Rows must be unique
+### unique(...) – Rows must be unique
 
 ✅ All rows must be entirely unique
 ```python
