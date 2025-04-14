@@ -274,6 +274,7 @@ result = schema.validate(df)
 FrameCheck validation errors:
 - Column 'email' has values not matching regex '.+@.+\..+': ['bademail'].
 ```
+[Go to Top](#main-features)
 
 #### `.column(..., min=..., max=..., after=..., before=...)` – Range & bound checks
 
@@ -303,7 +304,7 @@ FrameCheck validation errors:
 - Column 'signup_date' violates 'after' constraint: 2020-01-01.
 - Column 'last_login' violates 'max' constraint: 2025-01-01.
 ```
-
+[Go to Top](#main-features)
 
 ### columns(...)
 
@@ -329,6 +330,7 @@ FrameCheck validation errors:
 - Column 'a' contains values not in allowed set: [2].
 - Column 'b' contains values not in allowed set: [3].
 ```
+[Go to Top](#main-features)
 
 ### columns_are(...) – Exact column names and order
 
@@ -346,6 +348,7 @@ Expected columns in order: ['a', 'b']
 
 Found columns in order: ['b', 'a']
 ```
+[Go to Top](#main-features)
 
 ### empty() – Ensure the DataFrame is empty
 
@@ -361,6 +364,7 @@ FrameCheck validation errors:
 
 DataFrame is expected to be empty but contains rows.
 ```
+[Go to Top](#main-features)
 
 ### not_empty() – Ensure the DataFrame is not empty
 
@@ -376,8 +380,7 @@ FrameCheck validation errors:
 
 DataFrame is unexpectedly empty.
 ```
-
-
+[Go to Top](#main-features)
 
 ### only_defined_columns() – No extra/unexpected columns allowed
 
@@ -398,6 +401,7 @@ FrameCheck validation errors:
 
 Unexpected columns in DataFrame: ['extra']
 ```
+[Go to Top](#main-features)
 
 ### row_count(...) – Validate the number of rows
 
@@ -428,6 +432,7 @@ FrameCheck validation errors:
 
 DataFrame must have exactly 2 rows (found 3).
 ```
+[Go to Top](#main-features)
 
 ### unique(...) – Rows must be unique
 
@@ -464,7 +469,7 @@ FrameCheck validation errors:
 
 Rows are not unique based on columns: ['user_id']
 ```
-
+[Go to Top](#main-features)
 
 ---
 
