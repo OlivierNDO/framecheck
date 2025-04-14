@@ -1,12 +1,21 @@
 from setuptools import setup, find_packages
 
 setup(
-    name="valipy",
+    name="framecheck",
     version="0.1.0",
     packages=find_packages(),
-    install_requires=["pandas", "jinja2"],
-    author="Your Name",
-    author_email="your.email@example.com",
-    description="Easy data validation for pandas DataFrames",
-    url="https://github.com/yourusername/valipy",
+    install_requires=[
+        "pandas"
+    ],
+    extras_require={
+        "dev": [
+            "pytest",
+            "pytest-cov",
+            "pytest-html"
+        ]
+    },
+    author="Nick Olivier",
+    author_email="Olivier_N@alum.lynchburg.edu",
+    description="Lightweight, flexible, and intuitive validation for pandas DataFrames.",
+    url="https://github.com/OlivierNDO/framecheck/",
 )

@@ -1,5 +1,6 @@
 # Individual files
 test_src_modules.py
+check_functionality.py
 
 # Backup files
 *.bak*
@@ -37,3 +38,27 @@ build/
 dist/
 *.egg-info/
 .pytest_cache/
+
+# Coverage reports
+htmlcov/
+.coverage
+coverage.xml
+
+# Test outputs
+*.pytest_cache/
+*.pkl
+.cache/
+
+# Wheel and distribution files
+*.whl
+
+# Metadata (in case of builds gone wrong)
+*.egg
+MANIFEST
+
+# Local test installs
+*.egg-info/
+*.eggs/
+
+# Pip environment files
+pip-log.txt

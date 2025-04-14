@@ -27,13 +27,13 @@ pip install coming soon
 
 ## Table of Contents
 
-- [Getting Started](#getting-started)
-- [Core FrameCheck Features](#core-framecheck-features)
-    - [column](#column)
-    - [warn_only](#warn_only)
-    - [only_defined_columns](#only_defined_columns)
-    - [get_invalid_rows](#get_invalid_rows)
+- [Getting Started](#-example-catch-data-issues-before-they-cause-bugs)
+- [Output](#-output)
+- [Comparison with Other Approaches](#equivalent-code-in-greatexpectations)
+    - [great_expectations](#equivalent-code-in-greatexpectations)
+    - [Manual Validation](#equivalent-code-without-a-package)
 - [License](#license)
+- [Contact](#contact)
 
 
 ---
@@ -87,12 +87,14 @@ DataFrame must have at least 5 rows (found 3).
 Unexpected columns in DataFrame: ['good_credit', 'home_owner', 'id', 'promo_eligible', 'score']
 ```
 
+---
+
+## Comparison with Other Approaches
+
 Equivalent code in [great_expectations](https://docs.greatexpectations.io/)
 (which is a fantastic package with a much broader focus than FrameCheck).
 
 
-:
-:
 ```python
 import great_expectations as ge
 
@@ -170,8 +172,6 @@ if unexpected:
 if errors:
     raise ValueError("Validation failed:\n" + "\n".join(errors))
 ```
-
-
 
 ---
 
