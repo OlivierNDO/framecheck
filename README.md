@@ -8,9 +8,11 @@ Define expectations for your data, validate them cleanly, and surface friendly e
 
 ---
 
-## Installation
+## 📦 Installation
 
-pip install coming soon
+```bash
+pip install framecheck
+```
 
 ---
 
