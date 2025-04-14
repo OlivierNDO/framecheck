@@ -4,7 +4,8 @@ import numbers
 import numpy as np
 import pandas as pd
 from typing import Any, Callable, List, Optional, Union
-from src.utilities import CheckFactory
+from framecheck.utilities import CheckFactory
+
 
 class ColumnCheck:
     def __init__(self, column_name: str, raise_on_fail: bool = True):

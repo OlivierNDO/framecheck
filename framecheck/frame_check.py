@@ -4,7 +4,7 @@ import pandas as pd
 from typing import Union, List, Set, Optional, Dict, Any, Literal
 import warnings
 
-from .column_checks import (
+from framecheck.column_checks import (
     BoolColumnCheck,
     DatetimeColumnCheck,
     CustomFunctionCheck,
@@ -14,18 +14,16 @@ from .column_checks import (
     StringColumnCheck
 )
 
-from .dataframe_checks import (
+from framecheck.dataframe_checks import (
     DataFrameCheck,
     DefinedColumnsOnlyCheck,
     IsEmptyCheck,
     NotEmptyCheck,
     RowCountCheck,
     UniquenessCheck
-    
 )
 
-from src.utilities import CheckFactory
-
+from framecheck.utilities import CheckFactory
 
 
 

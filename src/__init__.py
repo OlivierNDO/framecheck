@@ -1,1 +1,0 @@
-# ValiPy core package

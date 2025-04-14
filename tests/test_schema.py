@@ -1,8 +1,8 @@
 import unittest
 import pandas as pd
-from src.frame_check import Schema, ValidationResult
-from src.column_checks import ColumnCheck
-from src.dataframe_checks import DefinedColumnsOnlyCheck
+from framecheck.frame_check import Schema, ValidationResult
+from framecheck.column_checks import ColumnCheck
+from framecheck.dataframe_checks import DefinedColumnsOnlyCheck
 
 
 class DummyCheck(ColumnCheck):

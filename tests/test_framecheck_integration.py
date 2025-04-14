@@ -3,7 +3,7 @@ from unittest.mock import patch
 import pandas as pd
 import numpy as np
 from decimal import Decimal
-from src.frame_check import FrameCheck
+from framecheck.frame_check import FrameCheck
 
 
 class TestFrameCheckDataFrameChecks(unittest.TestCase):

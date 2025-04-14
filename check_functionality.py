@@ -6,10 +6,10 @@ Created on Thu Apr 10 13:24:46 2025
 """
 import os
 import sys
-sys.dont_write_bytecode = True
+#sys.dont_write_bytecode = True
 
 
-from src.frame_check import FrameCheck
+from framecheck import FrameCheck
 
 import pandas as pd
 

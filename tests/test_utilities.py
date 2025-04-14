@@ -1,6 +1,6 @@
 import unittest
-from src.utilities import CheckFactory
-from src.column_checks import ColumnCheck
+from framecheck.utilities import CheckFactory
+from framecheck.column_checks import ColumnCheck
 
 
 # Simulated checks for testing

@@ -3,7 +3,8 @@ from datetime import datetime, timedelta
 import pandas as pd
 import numpy as np
 from decimal import Decimal
-from src.column_checks import (
+
+from framecheck.column_checks import (
     IntColumnCheck,
     FloatColumnCheck,
     StringColumnCheck,
@@ -13,6 +14,7 @@ from src.column_checks import (
     ColumnExistsCheck,
     ColumnCheck
 )
+
 
 
 class TestColumnCheck(unittest.TestCase):

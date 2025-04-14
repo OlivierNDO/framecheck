@@ -1,6 +1,6 @@
 import unittest
 import pandas as pd
-from src.frame_check import ValidationResult
+from framecheck.frame_check import ValidationResult
 
 
 class TestValidationResult(unittest.TestCase):

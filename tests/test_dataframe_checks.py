@@ -1,6 +1,6 @@
 import unittest
 import pandas as pd
-from src.dataframe_checks import (
+from framecheck.dataframe_checks import (
     DefinedColumnsOnlyCheck, 
     IsEmptyCheck,
     NoNullsCheck,
