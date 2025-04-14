@@ -59,6 +59,8 @@ MANIFEST
 # Local test installs
 *.egg-info/
 *.eggs/
+*framecheck.egg-info/
+framecheck.egg-info/
 
 # Pip environment files
 pip-log.txt
