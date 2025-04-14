@@ -37,14 +37,15 @@ pip install framecheck
 - [FrameCheck Methods](#framecheck-methods)
   - [.column(...)](#column--core-behaviors)
   - [.columns(...)](#columns)
-  - [.columns_are(...)](#columns_are)
-  - [.empty()](#empty)
-  - [.not_empty()](#not_empty)
-  - [.only_defined_columns()](#only_defined_columns)
-  - [.row_count(...)](#row_count)
-  - [.unique(...)](#unique)
+  - [.columns_are(...)](#columns_are---exact-column-names-and-order)
+  - [.empty()](#empty---ensure-the-dataframe-is-empty)
+  - [.not_empty()](#not_empty---ensure-the-dataframe-is-not-empty)
+  - [.only_defined_columns()](#only_defined_columns---no-extraunexpected-columns-allowed)
+  - [.row_count(...)](#row_count---validate-the-number-of-rows)
+  - [.unique(...)](#unique---rows-must-be-unique)
 - [License](#license)
 - [Contact](#contact)
+
 
 
 ---
@@ -328,7 +329,8 @@ FrameCheck validation errors:
 - Column 'b' contains values not in allowed set: [3].
 ```
 
-### `columns_are([...])` – Exact column names and order
+### columns_are(...) – Exact column names and order
+
 ```python
 df = pd.DataFrame({'b': [1], 'a': [2]})
 
@@ -344,7 +346,8 @@ Expected columns in order: ['a', 'b']
 Found columns in order: ['b', 'a']
 ```
 
-### `empty()` – Ensure the DataFrame is empty
+### empty() – Ensure the DataFrame is empty
+
 ```python
 df = pd.DataFrame({'x': [1, 2]})
 
@@ -358,7 +361,8 @@ FrameCheck validation errors:
 DataFrame is expected to be empty but contains rows.
 ```
 
-### `not_empty()` – Ensure the DataFrame is not empty
+### not_empty() – Ensure the DataFrame is not empty
+
 ```python
 df = pd.DataFrame(columns=['a', 'b'])
 
@@ -374,7 +378,8 @@ DataFrame is unexpectedly empty.
 
 
 
-### `only_defined_columns()` – No extra/unexpected columns allowed
+### only_defined_columns() – No extra/unexpected columns allowed
+
 ```python
 df = pd.DataFrame({'a': [1], 'b': [2], 'extra': [999]})
 
@@ -393,7 +398,8 @@ FrameCheck validation errors:
 Unexpected columns in DataFrame: ['extra']
 ```
 
-### `row_count(...)` – Validate the number of rows
+### row_count(...) – Validate the number of rows
+
 ✅ Minimum rows
 ```python
 df = pd.DataFrame({'x': [1, 2]})
@@ -422,7 +428,8 @@ FrameCheck validation errors:
 DataFrame must have exactly 2 rows (found 3).
 ```
 
-### `unique()` – Rows must be unique
+### unique() – Rows must be unique
+
 ✅ All rows must be entirely unique
 ```python
 df = pd.DataFrame({
@@ -456,11 +463,6 @@ FrameCheck validation errors:
 
 Rows are not unique based on columns: ['user_id']
 ```
-
-
-
-
-
 
 
 ---
