@@ -41,8 +41,6 @@ dist/
 
 # Coverage reports
 htmlcov/
-.coverage
-coverage.xml
 
 # Test outputs
 *.pytest_cache/
