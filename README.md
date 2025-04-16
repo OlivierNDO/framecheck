@@ -119,27 +119,30 @@ Equivalent code in [great_expectations](https://docs.greatexpectations.io/)
 
 
 ```python
-import great_expectations as ge
+import great_expectations as gx
 
-ge_df = ge.from_pandas(df)
-ge_df.expect_column_values_to_be_in_set('a', [0, 1])
-ge_df.expect_column_values_to_be_of_type('a', 'int64')
-ge_df.expect_column_values_to_be_in_set('b', [0, 1])
-ge_df.expect_column_values_to_be_of_type('b', 'int64')
-ge_df['timestamp'] = pd.to_datetime(ge_df['timestamp'])
-ge_df.expect_column_values_to_be_of_type('timestamp', 'datetime64[ns]')
-ge_df.expect_column_values_to_be_between('timestamp', min_value='2020-01-01')
-ge_df.expect_column_values_to_match_regex('email', r'.+@.+\..+', mostly=1.0)
-ge_df.expect_table_row_count_to_be_between(min_value=5, max_value=100)
-ge_df.expect_table_row_count_to_be_greater_than(0)
-expected_columns = {'a', 'b', 'timestamp', 'email'}
-unexpected = set(df.columns) - expected_columns
-if unexpected:
-    raise ValueError(f"Unexpected columns in DataFrame: {unexpected}")
+df['timestamp'] = pd.to_datetime(df['timestamp'])
 
-results = ge_df.validate()
-if not results['success']:
-    raise ValueError(f"Validation failed: {results}")
+context = gx.get_context(mode="ephemeral")
+datasource = context.data_sources.add_pandas(name="pandas_src")
+asset = datasource.add_dataframe_asset(name="df_asset")
+batch_def = asset.add_batch_definition_whole_dataframe(name="df_batch")
+batch = batch_def.get_batch({"dataframe": df})
+
+batch.expect_column_values_to_be_in_set("a", [0, 1])
+batch.expect_column_values_to_be_of_type("a", "int64")
+batch.expect_column_values_to_be_in_set("b", [0, 1])
+batch.expect_column_values_to_be_of_type("b", "int64")
+batch.expect_column_values_to_be_of_type("timestamp", "datetime64[ns]")
+batch.expect_column_values_to_be_between("timestamp", min_value="2020-01-01")
+batch.expect_column_values_to_match_regex("email", r".+@.+\..+")
+batch.expect_table_row_count_to_be_between(min_value=5, max_value=100)
+batch.expect_table_row_count_to_be_greater_than(0)
+batch.expect_table_columns_to_match_ordered_list(expected_column_names=["a", "b", "timestamp", "email"])
+results = batch.validate()
+
+if not results["success"]:
+    raise ValueError("Validation failed")
 ```
 
 Equivalent code without a package:
@@ -292,7 +295,7 @@ result = schema.validate(df)
 FrameCheck validation errors:
 - Column 'email' has values not matching regex '.+@.+\..+': ['bademail'].
 ```
-[Go to Top](#main-features)
+
 
 #### `.column(..., min=..., max=..., after=..., before=...)` – Range & bound checks
 
@@ -322,7 +325,7 @@ FrameCheck validation errors:
 - Column 'signup_date' violates 'after' constraint: 2020-01-01.
 - Column 'last_login' violates 'max' constraint: 2025-01-01.
 ```
-[Go to Top](#main-features)
+
 
 ### columns(...)
 
@@ -348,7 +351,7 @@ FrameCheck validation errors:
 - Column 'a' contains values not in allowed set: [2].
 - Column 'b' contains values not in allowed set: [3].
 ```
-[Go to Top](#main-features)
+
 
 ### columns_are(...) – Exact column names and order
 
@@ -393,7 +396,7 @@ FrameCheck validation errors:
 
 flagged must be True when score > 0.9 (failed on 1 row(s))
 ```
-[Go to Top](#main-features)
+
 
 ### empty() – Ensure the DataFrame is empty
 
@@ -409,7 +412,7 @@ FrameCheck validation errors:
 
 DataFrame is expected to be empty but contains rows.
 ```
-[Go to Top](#main-features)
+
 
 ### not_empty() – Ensure the DataFrame is not empty
 
@@ -425,7 +428,7 @@ FrameCheck validation errors:
 
 DataFrame is unexpectedly empty.
 ```
-[Go to Top](#main-features)
+
 
 ### only_defined_columns() – No extra/unexpected columns allowed
 
@@ -446,7 +449,7 @@ FrameCheck validation errors:
 
 Unexpected columns in DataFrame: ['extra']
 ```
-[Go to Top](#main-features)
+
 
 ### row_count(...) – Validate the number of rows
 
@@ -477,7 +480,7 @@ FrameCheck validation errors:
 
 DataFrame must have exactly 2 rows (found 3).
 ```
-[Go to Top](#main-features)
+
 
 ### unique(...) – Rows must be unique
 

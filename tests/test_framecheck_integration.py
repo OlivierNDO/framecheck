@@ -174,19 +174,6 @@ class TestComplexValidationChains(unittest.TestCase):
         )
         result = schema.validate(df)
         self.assertEqual(len(result.errors), 2)
-
-    def test_float_then_function(self):
-        """Float range check followed by custom function is applied correctly."""
-        df = pd.DataFrame({'score': [0.4, 0.6, 0.7]})
-        schema = (
-            FrameCheck()
-            .column('score', type='float', max=0.7)
-            .column('score', function=lambda x: x != 0.6, description='No 0.6')
-            
-        )
-        result = schema.validate(df)
-        self.assertEqual(len(result.errors), 1)
-        self.assertIn('No 0.6', result.errors[0])
         
     def test_string_not_in_set_disallowed_values(self):
         df = pd.DataFrame({'color': ['red', 'green', 'blue']})

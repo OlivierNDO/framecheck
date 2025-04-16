@@ -10,7 +10,6 @@ from framecheck.column_checks import (
     StringColumnCheck,
     BoolColumnCheck,
     DatetimeColumnCheck,
-    CustomFunctionCheck,
     ColumnExistsCheck,
     ColumnCheck
 )

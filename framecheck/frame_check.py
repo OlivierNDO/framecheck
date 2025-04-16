@@ -7,7 +7,6 @@ import warnings
 from framecheck.column_checks import (
     BoolColumnCheck,
     DatetimeColumnCheck,
-    CustomFunctionCheck,
     ColumnExistsCheck,
     FloatColumnCheck,
     IntColumnCheck,
