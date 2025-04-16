@@ -434,38 +434,3 @@ class StringColumnCheck(ColumnCheck):
         failing_indices.update(result["failing_indices"])
 
         return {"messages": messages, "failing_indices": failing_indices}
-
-
-
-
-class CustomFunctionCheck(ColumnCheck):
-    def __init__(self,
-                 column_name: str,
-                 function: Callable[[Any], bool],
-                 description: str = "",
-                 raise_on_fail: bool = True,
-                 not_null: bool = False):
-        super().__init__(column_name, raise_on_fail, not_null)
-        self.function = function
-        self.description = description or "Custom function check"
-
-    def validate(self, series: pd.Series) -> dict:
-        messages = []
-        failing_indices = set()
-        
-        if self.not_null:
-            null_mask = series.isna()
-            if null_mask.any():
-                messages.append(f"Column '{self.column_name}' contains missing values.")
-                failing_indices.update(series[null_mask].index)
-
-        invalid = ~series.map(self.function, na_action='ignore')
-
-        if invalid.any():
-            sample = list(series[invalid].unique()[:3])
-            messages.append(
-                f"{self.description} failed on column '{self.column_name}' for values: {sample}."
-            )
-            failing_indices.update(series[invalid].index)
-
-        return {"messages": messages, "failing_indices": failing_indices}

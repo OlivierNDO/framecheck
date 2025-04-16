@@ -38,6 +38,7 @@ pip install framecheck
   - [.column(...)](#column--core-behaviors)
   - [.columns(...)](#columns)
   - [.columns_are(...)](#columns_are--exact-column-names-and-order)
+  - [.custom_check(...)](#custom_check)
   - [.empty()](#empty--ensure-the-dataframe-is-empty)
   - [.not_empty()](#not_empty--ensure-the-dataframe-is-not-empty)
   - [.only_defined_columns()](#only_defined_columns--no-extraunexpected-columns-allowed)
@@ -364,6 +365,33 @@ FrameCheck validation errors:
 Expected columns in order: ['a', 'b']
 
 Found columns in order: ['b', 'a']
+```
+[Go to Top](#main-features)
+
+### custom_check(...)
+
+```python
+df = pd.DataFrame({
+    'score': [0.2, 0.95, 0.6],
+    'flagged': [False, False, True]
+})
+
+schema = (
+FrameCheck()
+.column('score', type='float')
+.column('flagged', type='bool')
+.custom_check(
+    lambda row: row['score'] <= 0.9 or row['flagged'] is True,
+    description="flagged must be True when score > 0.9"
+)
+)
+result = schema.validate(df)
+```
+
+```bash
+FrameCheck validation errors:
+
+flagged must be True when score > 0.9 (failed on 1 row(s))
 ```
 [Go to Top](#main-features)
 

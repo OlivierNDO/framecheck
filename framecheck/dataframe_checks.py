@@ -11,6 +11,24 @@ class DataFrameCheck:
         raise NotImplementedError("Subclasses must implement validate()")
 
 
+class CustomCheck(DataFrameCheck):
+    def __init__(self, function, description: Optional[str] = None, raise_on_fail: bool = True):
+        super().__init__(raise_on_fail)
+        self.function = function
+        self.description = description or "Custom check failed"
+
+    def validate(self, df: pd.DataFrame) -> dict:
+        messages = []
+        failing_indices = set()
+
+        invalid_mask = ~df.apply(self.function, axis=1)
+        if invalid_mask.any():
+            failing_indices = df[invalid_mask].index
+            messages.append(f"{self.description} (failed on {len(failing_indices)} row(s))")
+
+        return {"messages": messages, "failing_indices": set(failing_indices)}
+
+
 class DefinedColumnsOnlyCheck(DataFrameCheck):
     def __init__(self, expected_columns: List[str], raise_on_fail: bool = True):
         super().__init__(raise_on_fail)

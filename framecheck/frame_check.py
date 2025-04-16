@@ -15,6 +15,7 @@ from framecheck.column_checks import (
 )
 
 from framecheck.dataframe_checks import (
+    CustomCheck,
     DataFrameCheck,
     DefinedColumnsOnlyCheck,
     ExactColumnsCheck,
@@ -150,6 +151,9 @@ class Schema:
         return result
 
 
+
+
+
 class FrameCheck:
     def __init__(self, log_errors: bool = True):
         self._column_checks = []
@@ -235,6 +239,10 @@ class FrameCheck:
 
     def columns_are(self, expected_columns: List[str], warn_only: bool = False) -> 'FrameCheck':
         self.df_checks.append(ExactColumnsCheck(expected_columns, raise_on_fail=not warn_only))
+        return self
+    
+    def custom_check(self, function, description: Optional[str] = None) -> 'FrameCheck':
+        self._dataframe_checks.append(CustomCheck(function=function, description=description))
         return self
 
     def validate(self, df: pd.DataFrame) -> ValidationResult:

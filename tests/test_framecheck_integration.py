@@ -89,6 +89,26 @@ class TestFrameCheckDataFrameChecks(unittest.TestCase):
         self.assertIn('not unique', result.summary().lower())
 
 
+class TestFrameCheckWithCustomCheck(unittest.TestCase):
+
+    def test_custom_check_integration(self):
+        df = pd.DataFrame({
+            'model_score': [0.1, 0.95, 0.8],
+            'flagged_for_review': [False, False, False]
+        })
+
+        schema = (
+            FrameCheck()
+            .custom_check(
+                lambda row: row['model_score'] <= 0.9 or row['flagged_for_review'] is True,
+                description="flagged_for_review must be True when model_score > 0.9"
+            )
+        )
+
+        result = schema.validate(df)
+        self.assertFalse(result.is_valid)
+        self.assertIn("flagged_for_review must be True", result.summary())
+        self.assertEqual(result._failing_row_indices, {1})
 
 class TestMultipleChecksSameColumn(unittest.TestCase):
     """Tests handling of multiple sequential checks applied to the same column."""

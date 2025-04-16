@@ -1,6 +1,7 @@
 import unittest
 import pandas as pd
 from framecheck.dataframe_checks import (
+    CustomCheck,
     DefinedColumnsOnlyCheck, 
     ExactColumnsCheck,
     IsEmptyCheck,
@@ -9,6 +10,51 @@ from framecheck.dataframe_checks import (
     RowCountCheck,
     UniquenessCheck
 )
+
+
+
+class TestCustomCheck(unittest.TestCase):
+
+    def test_custom_check_passes(self):
+        df = pd.DataFrame({'a': [1, 2, 3]})
+        check = CustomCheck(function=lambda row: row['a'] > 0)
+        result = check.validate(df)
+        self.assertEqual(result['messages'], [])
+        self.assertEqual(result['failing_indices'], set())
+
+    def test_custom_check_fails(self):
+        df = pd.DataFrame({'a': [1, -2, 3]})
+        check = CustomCheck(function=lambda row: row['a'] > 0)
+        result = check.validate(df)
+        self.assertTrue(result['messages'])
+        self.assertEqual(result['failing_indices'], {1})
+
+    def test_custom_check_description_auto(self):
+        df = pd.DataFrame({'a': [1, -2]})
+        check = CustomCheck(function=lambda row: row['a'] > 0)
+        result = check.validate(df)
+        self.assertIn("Custom check failed", result['messages'][0])
+
+    def test_custom_check_description_custom(self):
+        df = pd.DataFrame({'a': [0, -1]})
+        check = CustomCheck(
+            function=lambda row: row['a'] > 0,
+            description="a must be greater than 0"
+        )
+        result = check.validate(df)
+        self.assertIn("a must be greater than 0", result['messages'][0])
+
+    def test_all_rows_fail(self):
+        df = pd.DataFrame({'a': [-1, -2, -3]})
+        check = CustomCheck(function=lambda row: row['a'] > 0)
+        result = check.validate(df)
+        self.assertEqual(result['failing_indices'], {0, 1, 2})
+
+    def test_all_rows_pass(self):
+        df = pd.DataFrame({'a': [1, 2, 3]})
+        check = CustomCheck(function=lambda row: row['a'] > 0)
+        result = check.validate(df)
+        self.assertEqual(result['failing_indices'], set())
 
 class TestDefinedColumnsOnlyCheck(unittest.TestCase):
     def test_passes_when_no_extra_columns(self):
