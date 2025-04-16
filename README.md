@@ -262,6 +262,23 @@ FrameCheck validation errors:
 
 ---
 
+#### `.column(..., not_null=...)` – All values non-null if set to True
+```python
+df = pd.DataFrame({'is_active': [True, False, None]})
+
+schema = FrameCheck().column('is_active', type='bool', not_null=True)
+result = schema.validate(df)
+```
+
+```bash
+FrameCheck validation errors:
+- Column 'is_active' contains missing values.
+  result = schema.validate(df)
+```
+
+
+---
+
 #### `.column(..., regex=...)` – Pattern matching (for strings)
 ```python
 df = pd.DataFrame({'email': ['x@example.com', 'bademail']})
