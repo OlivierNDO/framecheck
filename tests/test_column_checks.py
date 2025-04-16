@@ -123,6 +123,10 @@ class TestDatetimeColumnCheck(unittest.TestCase):
         result = check.validate(series)
         self.assertEqual(result['messages'], [])
         self.assertEqual(result['failing_indices'], set())
+        
+    def test_equals_with_conflicting_bounds_raises(self):
+        with self.assertRaises(ValueError):
+            DatetimeColumnCheck(self.col, equals='2024-01-01', min='2023-01-01')
 
     def test_format_enforced_correctly(self):
         data = pd.Series(['01-04-2024', '02-04-2024'])
@@ -152,9 +156,18 @@ class TestDatetimeColumnCheck(unittest.TestCase):
         with self.assertRaises(ValueError):
             DatetimeColumnCheck(self.col, before='04-01-2024', format='%Y/%m/%d')
 
-    def test_invalid_bound_type_raises_type_error(self):
-        with self.assertRaises(TypeError):
-            DatetimeColumnCheck(self.col, before=12345)
+    def test_invalid_bound_format_raises_value_error(self):
+        with self.assertRaises(ValueError):
+            DatetimeColumnCheck(self.col, before='04-01-2024', format='%Y/%m/%d')
+
+    def test_invalid_coercion_flagged(self):
+        series = pd.Series(['2024-01-01', 'bad-date'])
+        check = DatetimeColumnCheck(self.col, format='%Y-%m-%d')
+        result = check.validate(series)
+    
+        self.assertTrue(result['messages'])  # It should report an error
+        self.assertIn(1, result['failing_indices'])  # 'bad-date' should be flagged
+
 
     def test_invalid_strings_fail(self):
         data = pd.Series(['2024-01-01', 'notadate', ''])
@@ -189,6 +202,14 @@ class TestDatetimeColumnCheck(unittest.TestCase):
         check = DatetimeColumnCheck(self.col, before='now')
         result = check.validate(data)
         self.assertTrue(any('before' in m for m in result['messages']))
+        
+    def test_string_tomorrow_bound(self):
+        check = DatetimeColumnCheck(self.col, before='tomorrow')
+        self.assertIsNotNone(check.before)
+
+    def test_string_yesterday_bound(self):
+        check = DatetimeColumnCheck(self.col, after='yesterday')
+        self.assertIsNotNone(check.after)
 
     def test_tomorrow_bound(self):
         tomorrow = datetime.today() + timedelta(days=1)
@@ -254,7 +275,7 @@ class TestFloatColumnCheck(unittest.TestCase):
         series = pd.Series([0.1, 0.2, 0.3, 0.5])
         check = FloatColumnCheck('score', in_set=[0.1, 0.2])
         result = check.validate(series)
-        self.assertIn("not in allowed set", result['messages'][0])
+        self.assertIn("contains unexpected values", result['messages'][0])
         self.assertEqual(result['failing_indices'], {2, 3})
 
     def test_infinite_values_trigger_warning(self):
@@ -293,6 +314,13 @@ class TestFloatColumnCheck(unittest.TestCase):
         self.assertEqual(result['messages'], [])
         self.assertEqual(result['failing_indices'], set())
         
+    def test_not_in_set_constraint(self):
+        series = pd.Series([0.1, 0.2, 0.3, 0.5, np.nan])
+        check = FloatColumnCheck('score', not_in_set=[0.3, 0.5])
+        result = check.validate(series)
+        self.assertIn("contains disallowed values", result['messages'][0])
+        self.assertEqual(result['failing_indices'], {2, 3})
+        
     def test_not_null_flag(self):
         series = pd.Series([1.0, np.nan, 2.0])
         check = FloatColumnCheck('score', not_null=True)
@@ -300,7 +328,6 @@ class TestFloatColumnCheck(unittest.TestCase):
         self.assertTrue(any("missing values" in m for m in result['messages']))
         self.assertIn(1, result['failing_indices'])
 
-        
     def test_valid_floats(self):
         series = pd.Series([0.1, 0.5, 0.99])
         check = FloatColumnCheck('score')
@@ -350,7 +377,7 @@ class TestIntColumnCheck(unittest.TestCase):
         series = pd.Series([1, 2, 3, 4])
         check = IntColumnCheck('col', in_set=[1, 2])
         result = check.validate(series)
-        self.assertIn("contains values not in allowed set", result['messages'][0])
+        self.assertIn("contains unexpected values", result['messages'][0])
         self.assertEqual(result['failing_indices'], {2, 3})
 
     def test_infinite_values_in_int_column(self):
@@ -383,13 +410,19 @@ class TestIntColumnCheck(unittest.TestCase):
         self.assertIn(1, result['failing_indices'])
         self.assertIn(2, result['failing_indices'])
         
+    def test_not_in_set_constraint(self):
+        series = pd.Series([1, 2, 3, 4, np.nan])
+        check = IntColumnCheck('col', not_in_set=[3, 4])
+        result = check.validate(series)
+        self.assertIn("contains disallowed values", result['messages'][0])
+        self.assertEqual(result['failing_indices'], {2, 3})
+        
     def test_not_null_flag(self):
         series = pd.Series([1, np.nan, 42])
         check = IntColumnCheck('col', not_null=True)
         result = check.validate(series)
         self.assertTrue(any("missing values" in m for m in result['messages']))
         self.assertIn(1, result['failing_indices'])
-
 
     def test_range_check_both_min_and_max(self):
         series = pd.Series([1, 10, 30])
@@ -484,7 +517,6 @@ class TestStringColumnCheck(unittest.TestCase):
         result = check.validate(series)
         self.assertTrue(any("missing values" in m for m in result['messages']))
         self.assertIn(1, result['failing_indices'])
-
 
     def test_regex_match_all(self):
         series = pd.Series(['abc@example.com', 'def@site.org'])

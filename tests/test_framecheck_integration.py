@@ -32,6 +32,14 @@ class TestFrameCheckDataFrameChecks(unittest.TestCase):
         result = schema.validate(df)
         self.assertTrue(result.is_valid)
         
+    def test_not_null_column_fails_on_nulls(self):
+        df = pd.DataFrame({'age': [20, None, 35]})
+        schema = FrameCheck().column('age', type='float', not_null=True)
+        result = schema.validate(df)
+        self.assertFalse(result.is_valid)
+        self.assertIn('missing values', result.summary())
+
+        
     def test_raise_on_error_raises_exception_on_failure(self):
         df = pd.DataFrame({'score': [0.5, 1.5]})  # 1.5 > 1.0 should fail
         schema = (
@@ -127,6 +135,14 @@ class TestMultipleChecksSameColumn(unittest.TestCase):
 class TestComplexValidationChains(unittest.TestCase):
     """Validates that complex column-level patterns are supported and handled correctly."""
 
+    def test_equals_with_not_null(self):
+        df = pd.DataFrame({'flag': [True, True, None]})
+        schema = FrameCheck().column('flag', type='bool', equals=True, not_null=True)
+        result = schema.validate(df)
+        self.assertFalse(result.is_valid)
+        self.assertIn('missing values', result.summary())
+        self.assertNotIn('must equal', result.summary())
+
     def test_in_set_then_regex(self):
         """in_set check followed by regex is applied correctly."""
         df = pd.DataFrame({'email': ['a@example.com', 'bademail', 'x@x.com']})
@@ -151,11 +167,34 @@ class TestComplexValidationChains(unittest.TestCase):
         result = schema.validate(df)
         self.assertEqual(len(result.errors), 1)
         self.assertIn('No 0.6', result.errors[0])
-
+        
+    def test_string_not_in_set_disallowed_values(self):
+        df = pd.DataFrame({'color': ['red', 'green', 'blue']})
+        schema = FrameCheck().column('color', type='string', not_in_set=['green'])
+        result = schema.validate(df)
+        self.assertFalse(result.is_valid)
+        self.assertIn('disallowed values', result.summary())
 
 
 class TestGeneralFrameCheckBehavior(unittest.TestCase):
     """Covers general validation behavior and configuration handling."""
+    
+    def test_column_after_finalize_raises(self):
+        """Calling column after only_defined_columns raises error."""
+        fc = FrameCheck().only_defined_columns()
+        with self.assertRaises(RuntimeError):
+            fc.column('x')
+            
+    def test_equals_and_in_set_raises_value_error(self):
+        with self.assertRaises(ValueError):
+            FrameCheck().column('x', type='int', equals=5, in_set=[1, 2, 3])
+    
+    def test_missing_column_with_exists_check(self):
+        """Missing column produces friendly message."""
+        df = pd.DataFrame({'a': [1]})
+        schema = FrameCheck().column('b')
+        result = schema.validate(df)
+        self.assertIn("'b'", result.summary())
 
     def test_only_defined_columns_blocks_extra(self):
         """Extra columns raise an error when only_defined_columns is set."""
@@ -168,19 +207,6 @@ class TestGeneralFrameCheckBehavior(unittest.TestCase):
         )
         result = schema.validate(df)
         self.assertIn('Unexpected columns', result.summary())
-
-    def test_column_after_finalize_raises(self):
-        """Calling column after only_defined_columns raises error."""
-        fc = FrameCheck().only_defined_columns()
-        with self.assertRaises(RuntimeError):
-            fc.column('x')
-
-    def test_missing_column_with_exists_check(self):
-        """Missing column produces friendly message."""
-        df = pd.DataFrame({'a': [1]})
-        schema = FrameCheck().column('b')
-        result = schema.validate(df)
-        self.assertIn("'b'", result.summary())
 
     def test_valid_multi_column_schema(self):
         """Multiple valid checks across columns yield no errors."""

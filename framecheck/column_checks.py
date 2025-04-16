@@ -15,6 +15,49 @@ class ColumnCheck:
 
     def validate(self, series: pd.Series) -> dict:
         raise NotImplementedError("Subclasses should implement validate()")
+        
+    def _check_membership_constraints(
+        self,
+        series: pd.Series,
+        in_set: Optional[List[Any]] = None,
+        not_in_set: Optional[List[Any]] = None,
+        equals_value: Optional[Any] = None
+    ) -> dict:
+        messages = []
+        failing_indices = set()
+    
+        if equals_value is not None:
+            mask = series != equals_value
+            invalid_values = series[mask].dropna()
+            if not invalid_values.empty:
+                sample = list(invalid_values.unique()[:3])
+                messages.append(
+                    f"Column '{self.column_name}' must equal '{equals_value}', but found: {sample}."
+                )
+                failing_indices.update(invalid_values.index)
+    
+        elif in_set is not None:
+            mask = ~series.isin(in_set)
+            invalid_values = series[mask].dropna()
+            if not invalid_values.empty:
+                sample = list(invalid_values.unique()[:3])
+                messages.append(
+                    f"Column '{self.column_name}' contains unexpected values: {sample}."
+                )
+                failing_indices.update(invalid_values.index)
+    
+        if not_in_set is not None:
+            mask = series.isin(not_in_set)
+            disallowed_values = series[mask].dropna()
+            if not disallowed_values.empty:
+                sample = list(disallowed_values.unique()[:3])
+                messages.append(
+                    f"Column '{self.column_name}' contains disallowed values: {sample}."
+                )
+                failing_indices.update(disallowed_values.index)
+    
+        return {"messages": messages, "failing_indices": failing_indices}
+
 
 
 class ColumnExistsCheck(ColumnCheck):
@@ -24,47 +67,37 @@ class ColumnExistsCheck(ColumnCheck):
 
 @CheckFactory.register('bool')
 class BoolColumnCheck(ColumnCheck):
-    def __init__(
-        self,
-        column_name: str,
-        equals: Optional[bool] = None,
-        raise_on_fail: bool = True,
-        not_null: bool = False
-    ):
+    def __init__(self, column_name: str, equals: Optional[bool] = None, raise_on_fail: bool = True, not_null: bool = False):
         super().__init__(column_name, raise_on_fail, not_null)
-
         if equals is not None and not isinstance(equals, bool):
             raise ValueError(f"'equals' for boolean column '{column_name}' must be True or False, not {type(equals).__name__}")
-
         self._equals_value = equals
 
     def validate(self, series: pd.Series) -> dict:
         messages = []
         failing_indices = set()
-        
+
         if self.not_null:
             null_mask = series.isna()
             if null_mask.any():
                 messages.append(f"Column '{self.column_name}' contains missing values.")
                 failing_indices.update(series[null_mask].index)
 
-        # Check for non-boolean values
         invalid_values = series[~series.map(lambda x: isinstance(x, bool)) & series.notna()]
         if not invalid_values.empty:
             sample = list(invalid_values.unique()[:3])
-            messages.append(
-                f"Column '{self.column_name}' contains non-boolean values: {sample}."
-            )
+            messages.append(f"Column '{self.column_name}' contains non-boolean values: {sample}.")
             failing_indices.update(invalid_values.index)
 
-        # Check for equality condition if 'equals' is set
-        if self._equals_value is not None:
-            equals_mask = series != self._equals_value
-            if equals_mask.any():
-                messages.append(f"Column '{self.column_name}' contains values that must equal {self._equals_value}.")
-                failing_indices.update(equals_mask[equals_mask].index)
+        result = self._check_membership_constraints(
+            series,
+            equals_value=self._equals_value
+        )
+        messages.extend(result["messages"])
+        failing_indices.update(result["failing_indices"])
 
         return {"messages": messages, "failing_indices": failing_indices}
+
 
 
 @CheckFactory.register('datetime')
@@ -81,9 +114,7 @@ class DatetimeColumnCheck(ColumnCheck):
         raise_on_fail: bool = True,
         not_null: bool = False
     ):
-        self.column_name = column_name
-        self.raise_on_fail = raise_on_fail
-        self.not_null = not_null
+        super().__init__(column_name, raise_on_fail, not_null)
         self.format = format
 
         def resolve_bound(value: Optional[Union[str, datetime]], bound_name: str) -> Optional[datetime]:
@@ -110,7 +141,6 @@ class DatetimeColumnCheck(ColumnCheck):
                     return pd.to_datetime(value)
             raise TypeError(f"{bound_name} must be a string or datetime, not {type(value)}")
 
-        # Validate no conflict between equals and other bounds
         if equals is not None and any([min, max, before, after]):
             raise ValueError("Cannot specify 'equals' with any of 'min', 'max', 'before', or 'after'.")
 
@@ -176,7 +206,7 @@ class DatetimeColumnCheck(ColumnCheck):
                         failing_indices.update(series[mask].index)
 
         return {"messages": messages, "failing_indices": failing_indices}
-
+    
 
 @CheckFactory.register('float')
 class FloatColumnCheck(ColumnCheck):
@@ -186,6 +216,7 @@ class FloatColumnCheck(ColumnCheck):
         min: Optional[float] = None,
         max: Optional[float] = None,
         in_set: Optional[List[float]] = None,
+        not_in_set: Optional[List[float]] = None,
         equals: Optional[float] = None,
         raise_on_fail: bool = True,
         not_null: bool = False
@@ -193,8 +224,8 @@ class FloatColumnCheck(ColumnCheck):
         super().__init__(column_name, raise_on_fail, not_null)
         self.min = min
         self.max = max
-        self.in_set = in_set
-        
+        self.not_in_set = not_in_set
+
         if equals is not None:
             if in_set is not None:
                 raise ValueError("Cannot specify both 'in_set' and 'equals'")
@@ -207,61 +238,55 @@ class FloatColumnCheck(ColumnCheck):
     def validate(self, series: pd.Series) -> dict:
         messages = []
         failing_indices = set()
-        
+
         if self.not_null:
             null_mask = series.isna()
             if null_mask.any():
                 messages.append(f"Column '{self.column_name}' contains missing values.")
                 failing_indices.update(series[null_mask].index)
-    
+
         valid_numeric_types = (int, float, Decimal, numbers.Real)
         non_float_like = series[~series.map(lambda x: isinstance(x, valid_numeric_types) or pd.isna(x))]
-    
+
         if not non_float_like.empty:
             sample = list(non_float_like.unique()[:3])
             messages.append(
                 f"Column '{self.column_name}' contains values that are not numeric: {sample}."
             )
             failing_indices.update(non_float_like.index)
-    
+
         if non_float_like.index.equals(series.dropna().index):
             return {"messages": messages, "failing_indices": failing_indices}
-    
+
         numeric_series = series.drop(index=non_float_like.index)
-    
-        if self.in_set is not None:
-            mask = ~numeric_series.isin(self.in_set)
-            if mask.any():
-                bad_values = [v.item() if hasattr(v, 'item') else v for v in numeric_series[mask].unique()[:3]]
-                messages.append(f"Column '{self.column_name}' contains values not in allowed set: {bad_values}.")
-                failing_indices.update(mask[mask].index)
-    
-        # Check for equality condition
-        if self._equals_value is not None:
-            equals_mask = numeric_series != self._equals_value
-            if equals_mask.any():
-                messages.append(f"Column '{self.column_name}' contains values that must equal {self._equals_value}.")
-                failing_indices.update(equals_mask[equals_mask].index)
-    
+
+        result = self._check_membership_constraints(
+            numeric_series,
+            in_set=self.in_set,
+            not_in_set=self.not_in_set,
+            equals_value=self._equals_value
+        )
+        messages.extend(result["messages"])
+        failing_indices.update(result["failing_indices"])
+
         inf_mask = numeric_series.map(lambda x: isinstance(x, float) and np.isinf(x))
         if inf_mask.any():
             messages.append(f"Column '{self.column_name}' contains infinite values.")
             failing_indices.update(numeric_series[inf_mask].index)
-    
+
         if self.min is not None:
             min_mask = numeric_series < self.min
             if min_mask.any():
                 messages.append(f"Column '{self.column_name}' has values less than {self.min}.")
                 failing_indices.update(min_mask[min_mask].index)
-    
+
         if self.max is not None:
             max_mask = numeric_series > self.max
             if max_mask.any():
                 messages.append(f"Column '{self.column_name}' has values greater than {self.max}.")
                 failing_indices.update(max_mask[max_mask].index)
-    
-        return {"messages": messages, "failing_indices": failing_indices}
 
+        return {"messages": messages, "failing_indices": failing_indices}
 
 
 
@@ -273,6 +298,7 @@ class IntColumnCheck(ColumnCheck):
         min: Optional[int] = None,
         max: Optional[int] = None,
         in_set: Optional[List[int]] = None,
+        not_in_set: Optional[List[str]] = None,
         equals: Optional[int] = None,
         raise_on_fail: bool = True,
         not_null: bool = False
@@ -280,7 +306,7 @@ class IntColumnCheck(ColumnCheck):
         super().__init__(column_name, raise_on_fail, not_null)
         self.min = min
         self.max = max
-
+        self.not_in_set = not_in_set
         if equals is not None:
             if in_set is not None:
                 raise ValueError("Cannot specify both 'in_set' and 'equals'")
@@ -343,19 +369,14 @@ class IntColumnCheck(ColumnCheck):
                 messages.append(f"Column '{self.column_name}' has values greater than {self.max}.")
                 failing_indices.update(mask[mask].index)
 
-        if self.in_set is not None:
-            mask = ~valid_series.isin(self.in_set)
-            if mask.any():
-                bad_values = [v.item() if hasattr(v, 'item') else v for v in valid_series[mask].unique()[:3]]
-                if self._equals_value is not None:
-                    messages.append(
-                        f"Column '{self.column_name}' must equal {self._equals_value}, but found values: {bad_values}."
-                    )
-                else:
-                    messages.append(
-                        f"Column '{self.column_name}' contains values not in allowed set: {bad_values}."
-                    )
-                failing_indices.update(mask[mask].index)
+        result = self._check_membership_constraints(
+            valid_series,
+            in_set=self.in_set,
+            not_in_set=self.not_in_set,
+            equals_value=self._equals_value
+        )
+        messages.extend(result["messages"])
+        failing_indices.update(result["failing_indices"])
 
         return {"messages": messages, "failing_indices": failing_indices}
 
@@ -368,6 +389,7 @@ class StringColumnCheck(ColumnCheck):
         column_name: str, 
         regex: Optional[str] = None, 
         in_set: Optional[List[str]] = None,
+        not_in_set: Optional[List[str]] = None,
         equals: Optional[str] = None,
         raise_on_fail: bool = True,
         not_null: bool = False
@@ -375,19 +397,17 @@ class StringColumnCheck(ColumnCheck):
         super().__init__(column_name, raise_on_fail, not_null)
         self.regex = regex
 
-        if equals is not None:
-            if in_set is not None:
-                raise ValueError("Cannot specify both 'in_set' and 'equals'")
-            self.in_set = [equals]
-            self._equals_value = equals
-        else:
-            self.in_set = in_set
-            self._equals_value = None
+        if equals is not None and in_set is not None:
+            raise ValueError("Cannot specify both 'in_set' and 'equals'")
+
+        self.in_set = in_set
+        self._equals_value = equals
+        self.not_in_set = not_in_set
 
     def validate(self, series: pd.Series) -> dict:
         messages = []
         failing_indices = set()
-        
+
         if self.not_null:
             null_mask = series.isna()
             if null_mask.any():
@@ -404,20 +424,14 @@ class StringColumnCheck(ColumnCheck):
                 )
                 failing_indices.update(failed.index)
 
-        if self.in_set:
-            mask = ~series.isin(self.in_set)
-            invalid_values = series[mask].dropna()
-            if not invalid_values.empty:
-                sample = list(invalid_values.unique()[:3])
-                if self._equals_value is not None:
-                    messages.append(
-                        f"Column '{self.column_name}' must equal '{self._equals_value}', but found: {sample}."
-                    )
-                else:
-                    messages.append(
-                        f"Column '{self.column_name}' contains unexpected values: {sample}."
-                    )
-                failing_indices.update(invalid_values.index)
+        result = self._check_membership_constraints(
+            series,
+            in_set=self.in_set,
+            not_in_set=self.not_in_set,
+            equals_value=self._equals_value
+        )
+        messages.extend(result["messages"])
+        failing_indices.update(result["failing_indices"])
 
         return {"messages": messages, "failing_indices": failing_indices}
 
@@ -425,7 +439,12 @@ class StringColumnCheck(ColumnCheck):
 
 
 class CustomFunctionCheck(ColumnCheck):
-    def __init__(self, column_name: str, function: Callable[[Any], bool], description: str = "", raise_on_fail: bool = True, not_null: bool = False):
+    def __init__(self,
+                 column_name: str,
+                 function: Callable[[Any], bool],
+                 description: str = "",
+                 raise_on_fail: bool = True,
+                 not_null: bool = False):
         super().__init__(column_name, raise_on_fail, not_null)
         self.function = function
         self.description = description or "Custom function check"
