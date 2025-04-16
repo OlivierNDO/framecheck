@@ -51,6 +51,20 @@ class TestBoolColumnCheck(unittest.TestCase):
     def test_equals_invalid_type(self):
         with self.assertRaises(ValueError):
             BoolColumnCheck('flag', equals="yes")
+            
+    def test_ignores_nan_values(self):
+        series = pd.Series([True, None, False, pd.NA, float('nan')])
+        check = BoolColumnCheck('subscribed')
+        result = check.validate(series)
+        self.assertEqual(result['messages'], [])
+        self.assertEqual(result['failing_indices'], set())
+            
+    def test_not_null_flag(self):
+        series = pd.Series([True, None, False])
+        check = BoolColumnCheck('subscribed', not_null=True)
+        result = check.validate(series)
+        self.assertTrue(any("missing values" in m for m in result['messages']))
+        self.assertIn(1, result['failing_indices'])
 
     def test_with_non_boolean_values(self):
         series = pd.Series([True, 'yes', 0, False])
@@ -60,12 +74,7 @@ class TestBoolColumnCheck(unittest.TestCase):
         self.assertIn(1, result['failing_indices'])
         self.assertIn(2, result['failing_indices'])
 
-    def test_ignores_nan_values(self):
-        series = pd.Series([True, None, False, pd.NA, float('nan')])
-        check = BoolColumnCheck('subscribed')
-        result = check.validate(series)
-        self.assertEqual(result['messages'], [])
-        self.assertEqual(result['failing_indices'], set())
+    
 
 
 
@@ -166,6 +175,13 @@ class TestDatetimeColumnCheck(unittest.TestCase):
         check = DatetimeColumnCheck(self.col, min='2024-01-01')
         result = check.validate(data)
         self.assertTrue(any('min' in m for m in result['messages']))
+        self.assertIn(1, result['failing_indices'])
+        
+    def test_not_null_flag(self):
+        series = pd.Series(['2024-01-01', None, '2024-01-02'])
+        check = DatetimeColumnCheck(self.col, not_null=True)
+        result = check.validate(series)
+        self.assertTrue(any("missing values" in m for m in result['messages']))
         self.assertIn(1, result['failing_indices'])
 
     def test_now_bound(self):
@@ -277,6 +293,14 @@ class TestFloatColumnCheck(unittest.TestCase):
         self.assertEqual(result['messages'], [])
         self.assertEqual(result['failing_indices'], set())
         
+    def test_not_null_flag(self):
+        series = pd.Series([1.0, np.nan, 2.0])
+        check = FloatColumnCheck('score', not_null=True)
+        result = check.validate(series)
+        self.assertTrue(any("missing values" in m for m in result['messages']))
+        self.assertIn(1, result['failing_indices'])
+
+        
     def test_valid_floats(self):
         series = pd.Series([0.1, 0.5, 0.99])
         check = FloatColumnCheck('score')
@@ -358,6 +382,14 @@ class TestIntColumnCheck(unittest.TestCase):
         self.assertEqual(len(result['messages']), 1)
         self.assertIn(1, result['failing_indices'])
         self.assertIn(2, result['failing_indices'])
+        
+    def test_not_null_flag(self):
+        series = pd.Series([1, np.nan, 42])
+        check = IntColumnCheck('col', not_null=True)
+        result = check.validate(series)
+        self.assertTrue(any("missing values" in m for m in result['messages']))
+        self.assertIn(1, result['failing_indices'])
+
 
     def test_range_check_both_min_and_max(self):
         series = pd.Series([1, 10, 30])
@@ -445,6 +477,14 @@ class TestStringColumnCheck(unittest.TestCase):
         check = StringColumnCheck('mixed', regex=r'^[a-z]+$')
         result = check.validate(series)
         self.assertEqual(result['failing_indices'], {1, 2})
+        
+    def test_not_null_flag(self):
+        series = pd.Series(['a', None, 'b'])
+        check = StringColumnCheck('str_col', not_null=True)
+        result = check.validate(series)
+        self.assertTrue(any("missing values" in m for m in result['messages']))
+        self.assertIn(1, result['failing_indices'])
+
 
     def test_regex_match_all(self):
         series = pd.Series(['abc@example.com', 'def@site.org'])

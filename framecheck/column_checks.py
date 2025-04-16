@@ -8,9 +8,10 @@ from framecheck.utilities import CheckFactory
 
 
 class ColumnCheck:
-    def __init__(self, column_name: str, raise_on_fail: bool = True):
+    def __init__(self, column_name: str, raise_on_fail: bool = True, not_null: bool = False):
         self.column_name = column_name
         self.raise_on_fail = raise_on_fail
+        self.not_null = not_null
 
     def validate(self, series: pd.Series) -> dict:
         raise NotImplementedError("Subclasses should implement validate()")
@@ -27,9 +28,10 @@ class BoolColumnCheck(ColumnCheck):
         self,
         column_name: str,
         equals: Optional[bool] = None,
-        raise_on_fail: bool = True
+        raise_on_fail: bool = True,
+        not_null: bool = False
     ):
-        super().__init__(column_name, raise_on_fail)
+        super().__init__(column_name, raise_on_fail, not_null)
 
         if equals is not None and not isinstance(equals, bool):
             raise ValueError(f"'equals' for boolean column '{column_name}' must be True or False, not {type(equals).__name__}")
@@ -39,6 +41,12 @@ class BoolColumnCheck(ColumnCheck):
     def validate(self, series: pd.Series) -> dict:
         messages = []
         failing_indices = set()
+        
+        if self.not_null:
+            null_mask = series.isna()
+            if null_mask.any():
+                messages.append(f"Column '{self.column_name}' contains missing values.")
+                failing_indices.update(series[null_mask].index)
 
         # Check for non-boolean values
         invalid_values = series[~series.map(lambda x: isinstance(x, bool)) & series.notna()]
@@ -70,10 +78,12 @@ class DatetimeColumnCheck(ColumnCheck):
         after: Optional[str] = None,
         equals: Optional[str] = None,
         format: Optional[str] = None,
-        raise_on_fail: bool = True
+        raise_on_fail: bool = True,
+        not_null: bool = False
     ):
         self.column_name = column_name
         self.raise_on_fail = raise_on_fail
+        self.not_null = not_null
         self.format = format
 
         def resolve_bound(value: Optional[Union[str, datetime]], bound_name: str) -> Optional[datetime]:
@@ -113,6 +123,12 @@ class DatetimeColumnCheck(ColumnCheck):
     def validate(self, series: pd.Series) -> dict:
         messages = []
         failing_indices = set()
+
+        if self.not_null:
+            null_mask = series.isna()
+            if null_mask.any():
+                messages.append(f"Column '{self.column_name}' contains missing values.")
+                failing_indices.update(series[null_mask].index)
 
         try:
             coerced = pd.to_datetime(series, format=self.format, errors='coerce')
@@ -171,9 +187,10 @@ class FloatColumnCheck(ColumnCheck):
         max: Optional[float] = None,
         in_set: Optional[List[float]] = None,
         equals: Optional[float] = None,
-        raise_on_fail: bool = True
+        raise_on_fail: bool = True,
+        not_null: bool = False
     ):
-        super().__init__(column_name, raise_on_fail)
+        super().__init__(column_name, raise_on_fail, not_null)
         self.min = min
         self.max = max
         self.in_set = in_set
@@ -190,6 +207,12 @@ class FloatColumnCheck(ColumnCheck):
     def validate(self, series: pd.Series) -> dict:
         messages = []
         failing_indices = set()
+        
+        if self.not_null:
+            null_mask = series.isna()
+            if null_mask.any():
+                messages.append(f"Column '{self.column_name}' contains missing values.")
+                failing_indices.update(series[null_mask].index)
     
         valid_numeric_types = (int, float, Decimal, numbers.Real)
         non_float_like = series[~series.map(lambda x: isinstance(x, valid_numeric_types) or pd.isna(x))]
@@ -251,9 +274,10 @@ class IntColumnCheck(ColumnCheck):
         max: Optional[int] = None,
         in_set: Optional[List[int]] = None,
         equals: Optional[int] = None,
-        raise_on_fail: bool = True
+        raise_on_fail: bool = True,
+        not_null: bool = False
     ):
-        super().__init__(column_name, raise_on_fail)
+        super().__init__(column_name, raise_on_fail, not_null)
         self.min = min
         self.max = max
 
@@ -271,6 +295,12 @@ class IntColumnCheck(ColumnCheck):
     def validate(self, series: pd.Series) -> dict:
         messages = []
         failing_indices = set()
+        
+        if self.not_null:
+            null_mask = series.isna()
+            if null_mask.any():
+                messages.append(f"Column '{self.column_name}' contains missing values.")
+                failing_indices.update(series[null_mask].index)
 
         def is_integer_like(x):
             if pd.isna(x):
@@ -339,9 +369,10 @@ class StringColumnCheck(ColumnCheck):
         regex: Optional[str] = None, 
         in_set: Optional[List[str]] = None,
         equals: Optional[str] = None,
-        raise_on_fail: bool = True
+        raise_on_fail: bool = True,
+        not_null: bool = False
     ):
-        super().__init__(column_name, raise_on_fail)
+        super().__init__(column_name, raise_on_fail, not_null)
         self.regex = regex
 
         if equals is not None:
@@ -356,6 +387,12 @@ class StringColumnCheck(ColumnCheck):
     def validate(self, series: pd.Series) -> dict:
         messages = []
         failing_indices = set()
+        
+        if self.not_null:
+            null_mask = series.isna()
+            if null_mask.any():
+                messages.append(f"Column '{self.column_name}' contains missing values.")
+                failing_indices.update(series[null_mask].index)
 
         if self.regex:
             non_null = series[series.notna()]
@@ -388,14 +425,20 @@ class StringColumnCheck(ColumnCheck):
 
 
 class CustomFunctionCheck(ColumnCheck):
-    def __init__(self, column_name: str, function: Callable[[Any], bool], description: str = "", raise_on_fail: bool = True):
-        super().__init__(column_name, raise_on_fail)
+    def __init__(self, column_name: str, function: Callable[[Any], bool], description: str = "", raise_on_fail: bool = True, not_null: bool = False):
+        super().__init__(column_name, raise_on_fail, not_null)
         self.function = function
         self.description = description or "Custom function check"
 
     def validate(self, series: pd.Series) -> dict:
         messages = []
         failing_indices = set()
+        
+        if self.not_null:
+            null_mask = series.isna()
+            if null_mask.any():
+                messages.append(f"Column '{self.column_name}' contains missing values.")
+                failing_indices.update(series[null_mask].index)
 
         invalid = ~series.map(self.function, na_action='ignore')
 
