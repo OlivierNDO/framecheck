@@ -31,8 +31,7 @@ pip install framecheck
 
 - [Getting Started](#example-catch-bad-model-output-before-it-hits-production)
 - [Comparison with Other Approaches](#comparison-with-other-approaches)
-  - [great_expectations](#equivalent-code-in-greatexpectations)
-  - [Manual Validation](#equivalent-code-without-a-package)
+  - [pydantic](#equivalent-code-in-pydantic)
 - [FrameCheck Methods](#framecheck-methods)
   - [.column(...)](#column--core-behaviors)
   - [.columns(...)](#columns)
@@ -75,7 +74,7 @@ df = pd.DataFrame({
 
 Before it goes downstream, this data **must** meet these conditions:
 
-- transaction_id follows a TXN format and isn’t missing
+- transaction_id follows a TXN format
 - user_id is a positive integer
 - transaction_time is a datetime before now
 - model_score is a float between 0.0 and 1.0
@@ -173,6 +172,127 @@ if not result.is_valid:
 FrameCheck errors:
 flagged_for_review must be True when model_score > 0.9 (failed on 1 row(s))
 ```
+
+## Equivalent code in [pydantic](https://github.com/pydantic/pydantic)
+
+Pydantic is a fantastic validation package with strong typing support and a much broader scope than just pandas DataFrames. It offers many more features than `framecheck`, but if you're optimizing for brevity and clarity, `framecheck` might be a better fit.
+
+🧮 90+ lines → 19 with `FrameCheck`
+
+Here's how you could implement the same validation logic using Pydantic’s model-based approach:
+
+
+```python
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+df['transaction_time'] = pd.to_datetime(df['transaction_time'])
+
+class ModelOutput(BaseModel):
+    transaction_id: str
+    user_id: int
+    transaction_time: datetime
+    model_score: float
+    model_version: str
+    flagged_for_review: bool
+    
+    expected_columns: ClassVar[set] = {'transaction_id', 'user_id', 'transaction_time', 
+                                      'model_score', 'model_version', 'flagged_for_review'}
+    
+    @field_validator('transaction_id')
+    @classmethod
+    def transaction_id_format(cls, v):
+        if not re.match(r'^TXN\d{4,}$', v):
+            raise ValueError(f"transaction_id must follow TXN format, got: {v}")
+        return v
+    
+    @field_validator('user_id')
+    @classmethod
+    def user_id_positive(cls, v):
+        if v < 1:
+            raise ValueError("user_id must be positive")
+        return v
+    
+    @field_validator('transaction_time')
+    @classmethod
+    def transaction_time_before_now(cls, v):
+        if v > datetime.now():
+            raise ValueError("transaction_time must be before now")
+        return v
+    
+    @field_validator('model_score')
+    @classmethod
+    def model_score_range(cls, v):
+        if not (0.0 <= v <= 1.0):
+            raise ValueError("model_score must be between 0.0 and 1.0")
+        
+        # Warning if model_score is exactly zero
+        if v == 0.0:
+            logger.warning("WARNING: model_score is exactly zero")
+        
+        return v
+    
+    @field_validator('model_version')
+    @classmethod
+    def model_version_format(cls, v):
+        if not re.match(r'^v\d+\.\d+\.\d+$', v):
+            raise ValueError("model_version must look like a version string (e.g., v2.1.0)")
+        return v
+    
+    @model_validator(mode='after')
+    def high_score_must_be_flagged(self):
+        if self.model_score > 0.9 and not self.flagged_for_review:
+            raise ValueError("flagged_for_review must be True when model_score > 0.9")
+        return self
+    
+    @classmethod
+    def validate_dataframe(cls, df):
+        errors = []
+        warnings = []
+        
+        if df.empty:
+            errors.append("DataFrame is empty")
+            return errors, warnings
+        
+        actual_columns = set(df.columns)
+        if actual_columns != cls.expected_columns:
+            extra_cols = actual_columns - cls.expected_columns
+            missing_cols = cls.expected_columns - actual_columns
+            if extra_cols:
+                errors.append(f"Extra columns found: {extra_cols}")
+            if missing_cols:
+                errors.append(f"Missing columns: {missing_cols}")
+        
+        null_counts = df.isnull().sum()
+        columns_with_nulls = null_counts[null_counts > 0].index.tolist()
+        if columns_with_nulls:
+            for col in columns_with_nulls:
+                errors.append(f"Column '{col}' contains null values")
+        
+        for idx, row in df.iterrows():
+            try:
+                cls.model_validate(row.to_dict())
+            except ValueError as e:
+                errors.append(f"Row {idx}: {str(e)}")
+        
+        return errors, warnings
+
+errors, warnings = ModelOutput.validate_dataframe(df)
+
+if not errors:
+    print("All validation checks passed!")
+else:
+    print(f"Found {len(errors)} validation errors:")
+    for error in errors:
+        print(f"ERROR: {error}")
+        logger.error(error)
+
+if warnings:
+    print(f"Found {len(warnings)} warnings:")
+    for warning in warnings:
+        print(f"WARNING: {warning}")
+        logger.warning(warning)
+```
+
 
 ---
 
