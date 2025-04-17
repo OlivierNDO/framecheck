@@ -29,8 +29,7 @@ pip install framecheck
 
 ## Table of Contents
 
-- [Getting Started](#example-catch-data-issues-before-they-cause-bugs)
-- [Output](#output)
+- [Getting Started](#example-catch-bad-model-output-before-it-hits-production)
 - [Comparison with Other Approaches](#comparison-with-other-approaches)
   - [great_expectations](#equivalent-code-in-greatexpectations)
   - [Manual Validation](#equivalent-code-without-a-package)
@@ -44,159 +43,135 @@ pip install framecheck
   - [.only_defined_columns()](#only_defined_columns--no-extraunexpected-columns-allowed)
   - [.row_count(...)](#row_count--validate-the-number-of-rows)
   - [.unique(...)](#unique--rows-must-be-unique)
+- [Validation Results](#validation-results)
+  - [.validate()](#validate--run-all-checks-and-collect-results)
+  - [.get_invalid_rows(...)](#get_invalid_rows--return-subset-of-failing-rows)
 - [License](#license)
 - [Contact](#contact)
 
 
-
-
 ---
 
 
-## 🔥 Example: Catch data issues before they cause bugs
-Example dataframe:
+## 🔥 Example: Catch Bad Model Output Before It Hits Production
+Model output that gets sent to a production application:
 ```python
+import logging
 import pandas as pd
 from framecheck import FrameCheck
 
+logger = logging.getLogger("model_validation")
+logger.setLevel(logging.INFO)
+
 df = pd.DataFrame({
-    'a': [0, 1, 0, 1, 2],
-    'b': [1, 1, 0, 0, 3],
-    'timestamp': ['2022-01-01', '2022-01-02', '2019-12-31', '2021-01-01', '2023-05-01'],
-    'email': ['a@example.com', 'bad', 'b@example.com', 'not-an-email', 'c@example.com'],
-    'extra': ['x'] * 5
+    'transaction_id': ['TXN1001', 'TXN1002', 'TXN1003'],
+    'user_id': [501, 502, 503],
+    'transaction_time': ['2024-04-15 08:23:11', '2024-04-15 08:45:22', '2024-04-15 09:01:37'],
+    'model_score': [0.03, 0.92, 0.95],
+    'model_version': ['v2.1.0', 'v2.1.0', 'v2.1.0'],
+    'flagged_for_review': [False, True, False]
 })
 ```
 
+Before it goes downstream, this data **must** meet these conditions:
+
+- transaction_id follows a TXN format and isn’t missing
+- user_id is a positive integer
+- transaction_time is a datetime before now
+- model_score is a float between 0.0 and 1.0
+- model_version looks like a version string (e.g. v2.1.0)
+- flagged_for_review is boolean
+- no missing values anywhere
+- no extra columns
+- DataFrame is not empty
+- And: if model_score > 0.9, it must be flagged for review
+
+We would like a **warning** if:
+- model_score is exactly zero.
+
+If any of these criteria are not met, we need to:
+- Log the warnings and log (or raise exceptions for) errors
+- Record which records have invalid data
+
+
 With FrameCheck:
 ```python
-validator = (
+model_output_validator = (
     FrameCheck()
-    .columns(['a', 'b'], type='int', in_set=[0, 1])
-    .column('timestamp', type='datetime', after='2020-01-01')
-    .column('email', type='string', regex=r'.+@.+\..+', warn_only=True)
-    .only_defined_columns()
-    .row_count(min=5, max=100)
+    .column('transaction_id', type='string', regex=r'^TXN\d{4,}$')
+    .column('user_id', type='int', min=1)
+    .column('transaction_time', type='datetime', before='now')
+    .column('model_score', type='float', min=0.0, max=1.0)
+    .column('model_score', type='float', not_in_set=[0.0], warn_only=True)
+    .column('model_version', type='string')
+    .column('flagged_for_review', type='bool')
+    .custom_check(
+        lambda row: row['model_score'] <= 0.9 or row['flagged_for_review'] is True,
+        "flagged_for_review must be True when model_score > 0.9"
+    )
+    .not_null()
     .not_empty()
-    .raise_on_error()
+    .only_defined_columns()
 )
 
-result = validator.validate(df)
+result = model_output_validator.validate(df)
+
+if not result.is_valid:
+    invalid_rows = result.get_invalid_rows(df)
+    summary = result.summary()
 ```
 
-- `.warn_only=True` allows specific checks to issue warnings instead of failing validation.  
-- `.raise_on_error()` makes the entire validation raise an exception if **any non-warning** failure occurs.  
-- Together, they let you enforce hard rules while still being lenient on others.
-
-For example, in the code above:  
-- Invalid email formats will trigger a warning but not block execution.  
-- Everything else (bad types, missing columns, out-of-bound values, etc.) will raise an error.
-
-## 🧾 Output
-If the data is invalid, you'll get warning ...
-```sql
-FrameCheckWarning: FrameCheck validation warnings:
-- Column 'email' has values not matching regex '.+@.+\..+': ['bad'].
-  result = validator.validate(df)
-```
-
-... and because you used .raise_on_error(), it'll raise a clean exception:
-```sql
-ValueError: FrameCheck validation failed:
-Column 'a' is missing.
-Column 'b' is missing.
-Column 'timestamp' is missing.
-DataFrame must have at least 5 rows (found 3).
-Unexpected columns in DataFrame: ['good_credit', 'home_owner', 'id', 'promo_eligible', 'score']
-```
-
----
-
-## Comparison with Other Approaches
-
-Equivalent code in [great_expectations](https://docs.greatexpectations.io/)
-(which is a fantastic package with a much broader focus than FrameCheck).
+Without framecheck, this would be **a lot** of code. Now you can...
 
 
+View or save records with errors:
 ```python
-import great_expectations as gx
-
-df['timestamp'] = pd.to_datetime(df['timestamp'])
-
-context = gx.get_context(mode="ephemeral")
-datasource = context.data_sources.add_pandas(name="pandas_src")
-asset = datasource.add_dataframe_asset(name="df_asset")
-batch_def = asset.add_batch_definition_whole_dataframe(name="df_batch")
-batch = batch_def.get_batch({"dataframe": df})
-
-batch.expect_column_values_to_be_in_set("a", [0, 1])
-batch.expect_column_values_to_be_of_type("a", "int64")
-batch.expect_column_values_to_be_in_set("b", [0, 1])
-batch.expect_column_values_to_be_of_type("b", "int64")
-batch.expect_column_values_to_be_of_type("timestamp", "datetime64[ns]")
-batch.expect_column_values_to_be_between("timestamp", min_value="2020-01-01")
-batch.expect_column_values_to_match_regex("email", r".+@.+\..+")
-batch.expect_table_row_count_to_be_between(min_value=5, max_value=100)
-batch.expect_table_row_count_to_be_greater_than(0)
-batch.expect_table_columns_to_match_ordered_list(expected_column_names=["a", "b", "timestamp", "email"])
-results = batch.validate()
-
-if not results["success"]:
-    raise ValueError("Validation failed")
+invalid_rows = result.get_invalid_rows(df) # optionally include warning rows with `include_warnings = True`
+print(invalid_rows)
 ```
 
-Equivalent code without a package:
+| transaction_id | user_id | transaction_time     | model_score | model_version | flagged_for_review |
+|----------------|---------|----------------------|-------------|----------------|---------------------|
+| TXN1003        | 503     | 2024-04-15 09:01:37  | 0.95        | v2.1.0         | False               |
 
+
+Print a summary:
 ```python
-import pandas as pd
-import re
+print(result.summary())
+```
 
-errors = []
+```bash
+Validation FAILED
+1 error(s), 1 warning(s)
+Errors:
+  - flagged_for_review must be True when model_score > 0.9 (failed on 1 row(s))
+Warnings:
+  - Column 'model_score' contains disallowed values: [0.0].
+```
 
-if df.empty:
-    errors.append("DataFrame is empty.")
 
-row_count = len(df)
-if row_count < 5:
-    errors.append("DataFrame has fewer than 5 rows.")
-if row_count > 100:
-    errors.append("DataFrame has more than 100 rows.")
+Log warning(s):
+```python
+if result.warnings:
+    logger.warning("FrameCheck warnings:\n" + "\n".join(result.warnings))
+```
 
-for col in ['a', 'b']:
-    if col not in df.columns:
-        errors.append(f"Missing column: {col}")
-    else:
-        if not pd.api.types.is_integer_dtype(df[col]):
-            errors.append(f"Column '{col}' is not of integer type.")
-        if not df[col].isin([0, 1]).all():
-            errors.append(f"Column '{col}' contains values outside [0, 1].")
+```bash
+FrameCheck warnings:
+Column 'model_score' contains disallowed values: [0.0].
+```
 
-if 'timestamp' not in df.columns:
-    errors.append("Missing column: 'timestamp'")
-else:
-    try:
-        ts = pd.to_datetime(df['timestamp'], errors='coerce')
-        if ts.isna().any():
-            errors.append("Column 'timestamp' contains non-datetime values.")
-        elif (ts < pd.Timestamp('2020-01-01')).any():
-            errors.append("Column 'timestamp' has values before 2020-01-01.")
-    except Exception:
-        errors.append("Could not convert 'timestamp' to datetime.")
 
-if 'email' in df.columns:
-    invalid_emails = df[~df['email'].astype(str).str.match(r'.+@.+\..+')]
-    if not invalid_emails.empty:
-        print("Warning: Some emails don't match expected pattern.")
+Log error(s):
+```python
+if not result.is_valid:
+    logger.error("FrameCheck errors:\n" + "\n".join(result.errors))
+    invalid_rows.to_csv("invalid_model_output.csv", index=False)
+```
 
-expected_cols = {'a', 'b', 'timestamp', 'email'}
-actual_cols = set(df.columns)
-unexpected = actual_cols - expected_cols
-if unexpected:
-    errors.append(f"Unexpected columns in DataFrame: {sorted(unexpected)}")
-
-# Final decision
-if errors:
-    raise ValueError("Validation failed:\n" + "\n".join(errors))
+```bash
+FrameCheck errors:
+flagged_for_review must be True when model_score > 0.9 (failed on 1 row(s))
 ```
 
 ---
@@ -414,6 +389,32 @@ DataFrame is expected to be empty but contains rows.
 ```
 
 
+### `.get_invalid_rows()` – Return subset of failing rows
+
+Use `get_invalid_rows(df)` on the result of `.validate()` to extract only the rows that failed one or more checks.
+
+```python
+df = pd.DataFrame({
+    'a': [1, 2, -1],
+    'b': [10, 20, 30]
+})
+
+schema = FrameCheck().column('a', type='int', min=0)
+result = schema.validate(df)
+
+if not result.is_valid:
+    invalid_df = result.get_invalid_rows(df)
+    print(invalid_df)
+```
+
+```css
+   a   b
+2 -1  30
+```
+
+This is useful when you want to log, inspect, or export failing rows for debugging or downstream review.
+
+
 ### not_empty() – Ensure the DataFrame is not empty
 
 ```python
@@ -517,6 +518,31 @@ FrameCheck validation errors:
 
 Rows are not unique based on columns: ['user_id']
 ```
+
+### `.validate()` – Run all checks and collect results
+
+The `.validate()` method executes all column and DataFrame-level checks defined in your `FrameCheck` schema and returns a `ValidationResult` object.
+
+```python
+df = pd.DataFrame({
+    'score': [0.1, 0.5, 1.2]  # 1.2 exceeds the max
+})
+
+schema = FrameCheck().column('score', type='float', max=1.0)
+result = schema.validate(df)
+
+if not result.is_valid:
+    print(result.summary())
+```
+
+```sql
+FrameCheck validation errors:
+- Column 'score' has values greater than 1.0.
+```
+
+
+
+
 [Go to Top](#main-features)
 
 ---

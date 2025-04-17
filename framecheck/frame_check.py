@@ -19,6 +19,7 @@ from framecheck.dataframe_checks import (
     DefinedColumnsOnlyCheck,
     ExactColumnsCheck,
     IsEmptyCheck,
+    NoNullsCheck,
     NotEmptyCheck,
     RowCountCheck,
     UniquenessCheck
@@ -180,6 +181,10 @@ class FrameCheck:
         self._dataframe_checks.append(NotEmptyCheck())
         return self
     
+    def not_null(self, columns: Optional[List[str]] = None, warn_only: bool = False) -> 'FrameCheck':
+        self._dataframe_checks.append(NoNullsCheck(columns=columns, raise_on_fail=not warn_only))
+        return self
+    
     def only_defined_columns(self) -> 'FrameCheck':
         self._finalized = True
         return self
@@ -212,15 +217,6 @@ class FrameCheck:
         raise_on_fail = not kwargs.pop('warn_only', False)
         if col_type is None and not kwargs:
             self._column_checks.append(ColumnExistsCheck(name, raise_on_fail))
-            return self
-        
-        if 'function' in kwargs:
-            self._column_checks.append(CustomFunctionCheck(
-                column_name=name,
-                function=kwargs['function'],
-                description=kwargs.get('description', ''),
-                raise_on_fail=raise_on_fail
-            ))
             return self
         
         checks = CheckFactory.create(
