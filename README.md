@@ -13,6 +13,13 @@ Define expectations for your data, validate them cleanly, and surface friendly e
 ```bash
 pip install framecheck
 ```
+---
+
+## Try FrameCheck
+
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/OlivierNDO/framecheck/blob/main/framecheck_quickstart.ipynb)
+
+Try FrameCheck without installing anything - click the badge above to run an interactive demo notebook in Google Colab.
 
 ---
 
