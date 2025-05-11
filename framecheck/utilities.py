@@ -1,10 +1,40 @@
+"""
+utilities.py
+
+Utility module for registering and instantiating column validation checks.
+
+Defines a CheckFactory class that allows dynamic creation of column check instances
+based on a registry of check types.
+"""
+
 from inspect import signature
 
 class CheckFactory:
+    """
+    Factory and registry for dynamically instantiating column validation checks.
+
+    Class Attributes
+    ----------------
+    registry : dict
+        Mapping from check type name (str) to its associated check class.
+    """
     registry = {}
 
     @classmethod
     def register(cls, check_type: str):
+        """
+        Decorator to register a new check class under a given type name.
+    
+        Parameters
+        ----------
+        check_type : str
+            The identifier used to associate a string name with the check class.
+    
+        Returns
+        -------
+        Callable
+            A decorator that registers the class in the factory registry.
+        """
         def inner(check_cls):
             cls.registry[check_type] = check_cls
             return check_cls
@@ -12,6 +42,30 @@ class CheckFactory:
 
     @classmethod
     def create(cls, check_type: str, column_name: str, raise_on_fail: bool, **kwargs):
+        """
+        Instantiate one or more check instances based on type and optional flags.
+    
+        Parameters
+        ----------
+        check_type : str
+            The primary check type to instantiate (e.g., 'int', 'string').
+        column_name : str
+            Name of the column the check applies to.
+        raise_on_fail : bool
+            Whether to treat violations as errors.
+        **kwargs : dict
+            Additional keyword arguments to pass to the check class or flag-based checks.
+    
+        Returns
+        -------
+        object or list
+            A single check instance or a list of check instances, depending on the kwargs.
+    
+        Raises
+        ------
+        ValueError
+            If the check type is unknown or if invalid keyword arguments are provided.
+        """
         instances = []
 
         check_cls = cls.registry.get(check_type)

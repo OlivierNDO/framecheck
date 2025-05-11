@@ -1,3 +1,9 @@
+"""
+column_checks.py
+
+Validation rules applied at the column level. Each subclass of ColumnCheck
+implements logic specific to a data type or validation strategy.
+"""
 from datetime import datetime, timedelta
 from decimal import Decimal
 import numbers
@@ -8,12 +14,42 @@ from framecheck.utilities import CheckFactory
 
 
 class ColumnCheck:
+    """
+    Base class for all column-level validation checks.
+
+    Parameters
+    ----------
+    column_name : str
+        The name of the column to validate.
+    raise_on_fail : bool, optional
+        Whether to treat validation failure as an error (default is True).
+    not_null : bool, optional
+        Whether to fail if the column contains null values (default is False).
+    """
     def __init__(self, column_name: str, raise_on_fail: bool = True, not_null: bool = False):
         self.column_name = column_name
         self.raise_on_fail = raise_on_fail
         self.not_null = not_null
 
     def validate(self, series: pd.Series) -> dict:
+        """
+        Perform validation on the given pandas Series.
+
+        Parameters
+        ----------
+        series : pd.Series
+            The column data to validate.
+
+        Returns
+        -------
+        dict
+            Dictionary with 'messages' and 'failing_indices'.
+
+        Raises
+        ------
+        NotImplementedError
+            Must be implemented by subclasses.
+        """
         raise NotImplementedError("Subclasses should implement validate()")
         
     def _check_membership_constraints(
@@ -23,6 +59,26 @@ class ColumnCheck:
         not_in_set: Optional[List[Any]] = None,
         equals_value: Optional[Any] = None
     ) -> dict:
+        """
+        Helper to check if values are in an allowed set, not in a disallowed set,
+        or equal to a fixed value.
+
+        Parameters
+        ----------
+        series : pd.Series
+            The data to validate.
+        in_set : list, optional
+            Allowed values.
+        not_in_set : list, optional
+            Disallowed values.
+        equals_value : any, optional
+            A value all entries must match.
+
+        Returns
+        -------
+        dict
+            Dictionary with 'messages' and 'failing_indices'.
+        """
         messages = []
         failing_indices = set()
     
@@ -61,12 +117,32 @@ class ColumnCheck:
 
 
 class ColumnExistsCheck(ColumnCheck):
+    """
+    Dummy check used to assert column presence only.
+
+    This check always passes and is used when you want to ensure that a column
+    exists without enforcing any additional constraints.
+    """
     def validate(self, series: pd.Series) -> dict:
         return {"messages": [], "failing_indices": set()}  # pragma: no cover
 
 
 @CheckFactory.register('bool')
 class BoolColumnCheck(ColumnCheck):
+    """
+    Validate that a column contains only boolean values.
+
+    Parameters
+    ----------
+    column_name : str
+        Name of the column to validate.
+    equals : bool, optional
+        If provided, asserts that all non-null values equal this boolean.
+    raise_on_fail : bool, optional
+        Whether failure raises an error or warning.
+    not_null : bool, optional
+        Whether the column must not contain nulls.
+    """
     def __init__(self, column_name: str, equals: Optional[bool] = None, raise_on_fail: bool = True, not_null: bool = False):
         super().__init__(column_name, raise_on_fail, not_null)
         if equals is not None and not isinstance(equals, bool):
@@ -74,6 +150,19 @@ class BoolColumnCheck(ColumnCheck):
         self._equals_value = equals
 
     def validate(self, series: pd.Series) -> dict:
+        """
+        Validate the Series for boolean type compliance and equality constraint.
+
+        Parameters
+        ----------
+        series : pd.Series
+            Column values to validate.
+
+        Returns
+        -------
+        dict
+            Dictionary with 'messages' and 'failing_indices'.
+        """
         messages = []
         failing_indices = set()
 
@@ -102,6 +191,35 @@ class BoolColumnCheck(ColumnCheck):
 
 @CheckFactory.register('datetime')
 class DatetimeColumnCheck(ColumnCheck):
+    """
+    Validate that a column contains datetime values and optionally meets bounds.
+
+    Parameters
+    ----------
+    column_name : str
+        Name of the column to validate.
+    min : str or datetime, optional
+        Minimum allowed datetime value.
+    max : str or datetime, optional
+        Maximum allowed datetime value.
+    before : str or datetime, optional
+        All values must be before this datetime.
+    after : str or datetime, optional
+        All values must be after this datetime.
+    equals : str or datetime, optional
+        All values must match this datetime.
+    format : str, optional
+        Format string for parsing if input values are strings.
+    raise_on_fail : bool, optional
+        Whether failure raises an error or warning.
+    not_null : bool, optional
+        Whether the column must not contain nulls.
+
+    Raises
+    ------
+    ValueError
+        If 'equals' is used with any other bounds.
+    """
     def __init__(
         self,
         column_name: str,
@@ -118,6 +236,31 @@ class DatetimeColumnCheck(ColumnCheck):
         self.format = format
 
         def resolve_bound(value: Optional[Union[str, datetime]], bound_name: str) -> Optional[datetime]:
+            """
+        Convert a string or datetime input into a standardized datetime object.
+    
+        Recognizes natural language strings like 'today', 'now', 'yesterday', and 'tomorrow',
+        or attempts to parse strings using the provided format or pandas fallback.
+    
+        Parameters
+        ----------
+        value : str or datetime, optional
+            The boundary value to resolve.
+        bound_name : str
+            Name of the parameter being resolved (used in error messages).
+    
+        Returns
+        -------
+        datetime or None
+            A parsed datetime object, or None if the input was None.
+    
+        Raises
+        ------
+        ValueError
+            If parsing fails using the provided format.
+        TypeError
+            If the input is not a string or datetime.
+        """
             if value is None:
                 return None
             if isinstance(value, datetime):
@@ -151,6 +294,26 @@ class DatetimeColumnCheck(ColumnCheck):
         self.after = resolve_bound(after, "after")
 
     def validate(self, series: pd.Series) -> dict:
+        """
+        Validate that the column contains valid datetime values and respects defined constraints.
+    
+        Parameters
+        ----------
+        series : pd.Series
+            The Series containing the column data to validate.
+    
+        Returns
+        -------
+        dict
+            A dictionary with two keys:
+            - 'messages': a list of validation error messages.
+            - 'failing_indices': a set of row indices where validation failed.
+    
+        Raises
+        ------
+        ValueError
+            If datetime conversion fails using the specified format.
+        """
         messages = []
         failing_indices = set()
 
@@ -210,6 +373,33 @@ class DatetimeColumnCheck(ColumnCheck):
 
 @CheckFactory.register('float')
 class FloatColumnCheck(ColumnCheck):
+    """
+    Validate that a column contains numeric float-like values.
+
+    Parameters
+    ----------
+    column_name : str
+        Name of the column to validate.
+    min : float, optional
+        Minimum value allowed.
+    max : float, optional
+        Maximum value allowed.
+    in_set : list of float, optional
+        Allowed values.
+    not_in_set : list of float, optional
+        Disallowed values.
+    equals : float, optional
+        All values must equal this float.
+    raise_on_fail : bool, optional
+        Whether failure raises an error or warning.
+    not_null : bool, optional
+        Whether the column must not contain nulls.
+
+    Raises
+    ------
+    ValueError
+        If both 'in_set' and 'equals' are provided.
+    """
     def __init__(
         self,
         column_name: str,
@@ -236,6 +426,33 @@ class FloatColumnCheck(ColumnCheck):
             self._equals_value = None
 
     def validate(self, series: pd.Series) -> dict:
+        """
+        Validate that a column contains integer-like values.
+    
+        Parameters
+        ----------
+        column_name : str
+            Name of the column to validate.
+        min : int, optional
+            Minimum value allowed.
+        max : int, optional
+            Maximum value allowed.
+        in_set : list of int, optional
+            Allowed values.
+        not_in_set : list of int, optional
+            Disallowed values.
+        equals : int, optional
+            All values must equal this integer.
+        raise_on_fail : bool, optional
+            Whether failure raises an error or warning.
+        not_null : bool, optional
+            Whether the column must not contain nulls.
+    
+        Raises
+        ------
+        ValueError
+            If both 'in_set' and 'equals' are provided.
+        """
         messages = []
         failing_indices = set()
 
@@ -292,6 +509,31 @@ class FloatColumnCheck(ColumnCheck):
 
 @CheckFactory.register('int')
 class IntColumnCheck(ColumnCheck):
+    """
+    Validate that a column contains string values, optionally matching regex or sets.
+
+    Parameters
+    ----------
+    column_name : str
+        Name of the column to validate.
+    regex : str, optional
+        A regular expression that all string values must match.
+    in_set : list of str, optional
+        Allowed values.
+    not_in_set : list of str, optional
+        Disallowed values.
+    equals : str, optional
+        All values must equal this string.
+    raise_on_fail : bool, optional
+        Whether failure raises an error or warning.
+    not_null : bool, optional
+        Whether the column must not contain nulls.
+
+    Raises
+    ------
+    ValueError
+        If both 'in_set' and 'equals' are provided.
+    """
     def __init__(
         self,
         column_name: str,
@@ -319,6 +561,28 @@ class IntColumnCheck(ColumnCheck):
             self._equals_value = None
 
     def validate(self, series: pd.Series) -> dict:
+        """
+        Validate that the column contains integer-like values and meets constraints.
+    
+        Parameters
+        ----------
+        series : pd.Series
+            The column to validate.
+    
+        Returns
+        -------
+        dict
+            Dictionary with:
+            - 'messages': list of validation failure descriptions
+            - 'failing_indices': set of indices in the Series that failed validation
+    
+        Notes
+        -----
+        This method:
+        - Accepts ints, and floats that represent integers (e.g., 5.0)
+        - Rejects floats with decimals, booleans, strings, and infinite values
+        - Enforces optional constraints like min, max, exact equality, and membership
+        """
         messages = []
         failing_indices = set()
         
@@ -384,6 +648,34 @@ class IntColumnCheck(ColumnCheck):
 
 @CheckFactory.register('string')
 class StringColumnCheck(ColumnCheck):
+    """
+    Validate that a column contains string values and optionally matches regex or value constraints.
+    
+    This check supports ensuring all values match a regular expression pattern, belong to
+    an allowed set, are excluded from a disallowed set, or equal a specific string.
+    
+    Parameters
+    ----------
+    column_name : str
+        Name of the column to validate.
+    regex : str, optional
+        Regular expression that all values must match.
+    in_set : list of str, optional
+        Allowed string values.
+    not_in_set : list of str, optional
+        Disallowed string values.
+    equals : str, optional
+        All values must equal this string exactly.
+    raise_on_fail : bool, optional
+        Whether to treat validation failures as errors (default is True).
+    not_null : bool, optional
+        Whether to fail if the column contains nulls.
+        
+    Raises
+    ------
+    ValueError
+        If both 'in_set' and 'equals' are provided.
+    """
     def __init__(
         self, 
         column_name: str, 
@@ -405,6 +697,29 @@ class StringColumnCheck(ColumnCheck):
         self.not_in_set = not_in_set
 
     def validate(self, series: pd.Series) -> dict:
+        """
+        Validate the column's values against string constraints.
+    
+        Parameters
+        ----------
+        series : pd.Series
+            The column to validate.
+    
+        Returns
+        -------
+        dict
+            A dictionary with:
+            - 'messages': list of validation failure messages
+            - 'failing_indices': set of indices where validation failed
+    
+        Notes
+        -----
+        This method:
+        - Validates type compatibility with strings
+        - Optionally applies a regex pattern match
+        - Optionally checks for equality, inclusion, and exclusion rules
+        - Supports null checks if enabled
+        """
         messages = []
         failing_indices = set()
 
