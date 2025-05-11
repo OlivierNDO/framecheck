@@ -103,8 +103,8 @@ invalid_rows = result.get_invalid_rows(df, include_warnings = True)
 
 FrameCheck is designed to be concise and pandas-native. For full comparisons with other packages:
 
-- [Pydantic Comparison](https://framecheck.readthedocs.io/en/latest/tool_comparisons.html#pydantic)
-- [Pandera Comparison](https://framecheck.readthedocs.io/en/latest/tool_comparisons.html#pandera)
+- [Pydantic Comparison](https://framecheck.readthedocs.io/en/latest/usage_examples.html#validation-comparison)
+- [Pandera Comparison](https://framecheck.readthedocs.io/en/latest/usage_examples.html#validation-comparison)
 
 ---
 
