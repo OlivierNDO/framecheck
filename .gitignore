@@ -41,6 +41,7 @@ dist/
 
 # Coverage reports
 htmlcov/
+.coverage
 
 # Test outputs
 *.pytest_cache/
@@ -54,6 +55,10 @@ framecheck/__pycache__/
 # Metadata (in case of builds gone wrong)
 *.egg
 MANIFEST
+
+# Sphinx build artifacts
+docs/build/
+docs/_build/
 
 # Local test installs
 *.egg-info/

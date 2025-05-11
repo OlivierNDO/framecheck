@@ -49,9 +49,7 @@ Try FrameCheck without installing anything - click the badge above to run an int
   - [.only_defined_columns()](#only_defined_columns--no-extraunexpected-columns-allowed)
   - [.row_count(...)](#row_count--validate-the-number-of-rows)
   - [.unique(...)](#unique--rows-must-be-unique)
-- [Validation Results](#validation-results)
-  - [.validate()](#validate--run-all-checks-and-collect-results)
-  - [.get_invalid_rows(...)](#get_invalid_rows--return-subset-of-failing-rows)
+  - [.validate(...)](#validate--run-all-checks-and-collect-results)
 - [License](#license)
 - [Contact](#contact)
 

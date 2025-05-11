@@ -1,0 +1,34 @@
+/* Sidebar (left) background */
+.wy-side-nav-search, .wy-nav-top {
+    background-color: #2e7d52 !important;
+}
+
+/* Link color */
+a {
+    color: #2e7d52;
+}
+
+/* Optional: highlight color for active page */
+.wy-menu-vertical a:hover {
+    background-color: #2e7d5244;  /* translucent green */
+}
+
+/* Override API signature header color (e.g., class/function names) */
+.sig {
+    background-color: rgba(46, 125, 82, 0.12) !important;  /* light green tint */
+    color: #2e7d52 !important;  /* dark green text */
+    border-radius: 4px;
+    padding: 4px 6px;
+    border-top: none !important;  /* remove blue bar */
+    box-shadow: none !important;
+}
+
+.sig.sig-object {
+    border-top: none !important;
+}
+
+/* Override sidebar section headers (e.g., "CONTENTS:") */
+.wy-menu .caption-text {
+    color: #2e7d52 !important;
+    font-weight: bold;
+}
