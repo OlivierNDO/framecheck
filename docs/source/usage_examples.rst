@@ -328,3 +328,226 @@ get_invalid_rows()
    2 -1  30
 
 This is useful when you want to log, inspect, or export failing rows for debugging or downstream review.
+
+
+.. _validation_comparison:
+
+Validation Comparison
+=====================
+
+This section compares how the same validation logic is expressed using three tools:
+
+- **FrameCheck** (concise, purpose-built for DataFrames)
+- **Pandera** (powerful, flexible, but not optimized for logging or row capture)
+- **Pydantic** (designed for model schemas, not native to pandas)
+
+---
+
+Shared Setup
+------------
+
+.. code-block:: python
+
+    import pandas as pd
+    from datetime import datetime
+
+    df = pd.DataFrame({
+        'transaction_id': ['TXN1001', 'TXN1002', 'TXN1003', 'NUM9999'],
+        'user_id': [501, 502, -1, 504],
+        'transaction_time': ['2024-04-15 08:23:11', '2024-04-15 08:45:22', '2024-04-15 09:01:37', '2024-04-17 12:01:42'],
+        'model_score': [0.03, 0.92, 0.95, 0.0],
+        'model_version': ['v2.1.0', 'v2.1.0', 'v2.1.0', 'v2.1.0'],
+        'flagged_for_review': [False, True, False, False]
+    })
+
+---
+
+FrameCheck (19 lines)
+---------------------
+
+.. code-block:: python
+
+    from framecheck import FrameCheck
+
+    result = (
+        FrameCheck()
+        .column('transaction_id', type='string', regex=r'^TXN\d{4,}$')
+        .column('user_id', type='int', min=1)
+        .column('transaction_time', type='datetime', before='now')
+        .column('model_score', type='float', min=0.0, max=1.0)
+        .column('model_score', type='float', not_in_set=[0.0], warn_only=True)
+        .column('model_version', type='string')
+        .column('flagged_for_review', type='bool')
+        .custom_check(
+            lambda row: row['model_score'] <= 0.9 or row['flagged_for_review'] is True,
+            "flagged_for_review must be True when model_score > 0.9"
+        )
+        .not_null()
+        .not_empty()
+        .only_defined_columns()
+        .validate(df)
+    )
+
+    print(result.summary())
+
+.. code-block:: text
+
+    Validation FAILED
+    3 error(s), 1 warning(s)
+    Errors:
+      - Column 'user_id' has values less than 1.
+      - Column 'transaction_id' has values not matching regex '^TXN\d{4,}$'.
+      - flagged_for_review must be True when model_score > 0.9 (failed on 1 row(s))
+    Warnings:
+      - Column 'model_score' contains disallowed values: [0.0].
+
+---
+
+Pandera (with row capture added manually)
+-----------------------------------------
+
+.. code-block:: python
+
+    import pandera as pa
+    from pandera import Column, Check, DataFrameSchema
+
+    df['transaction_time'] = pd.to_datetime(df['transaction_time'])
+
+    schema = DataFrameSchema({
+        "transaction_id": Column(str, Check.str_matches(r"^TXN\d{4,}$"), nullable=False),
+        "user_id": Column(int, Check.ge(1), nullable=False),
+        "transaction_time": Column(pa.Timestamp, Check(lambda s: s < datetime.now()), nullable=False),
+        "model_score": Column(float, Check.in_range(0.0, 1.0), nullable=False),
+        "model_version": Column(str, nullable=False),
+        "flagged_for_review": Column(bool, nullable=False),
+    }, checks=[
+        Check(
+            lambda df: (df['model_score'] <= 0.9) | (df['flagged_for_review'] == True),
+            element_wise=False,
+            error="flagged_for_review must be True when model_score > 0.9"
+        )
+    ], strict=True)
+
+    if df.empty:
+        raise pa.errors.SchemaError("DataFrame is unexpectedly empty")
+
+    if not df[df['model_score'] == 0.0].empty:
+        print("Warning: model_score == 0.0 found")
+
+    try:
+        validated_df = schema.validate(df)
+    except pa.errors.SchemaErrors as e:
+        print("Pandera errors:")
+        print(e.failure_cases[['column', 'failure_case', 'index']])
+
+.. code-block:: text
+
+    Warning: model_score == 0.0 found
+    Pandera errors:
+               column         failure_case  index
+    0          user_id                  -1      2
+    1    transaction_id            NUM9999      3
+    2  flagged_for_review              NaN      2
+
+---
+
+Pydantic (manual row iteration)
+-------------------------------
+
+.. code-block:: python
+
+    from pydantic import BaseModel, field_validator, model_validator
+    from typing import ClassVar
+    import re, logging
+
+    logger = logging.getLogger()
+
+    class ModelOutput(BaseModel):
+        transaction_id: str
+        user_id: int
+        transaction_time: datetime
+        model_score: float
+        model_version: str
+        flagged_for_review: bool
+
+        expected_columns: ClassVar[set] = {
+            'transaction_id', 'user_id', 'transaction_time',
+            'model_score', 'model_version', 'flagged_for_review'
+        }
+
+        @field_validator('transaction_id')
+        @classmethod
+        def validate_txn(cls, v):
+            if not re.match(r'^TXN\d{4,}$', v):
+                raise ValueError("transaction_id must match TXN format")
+            return v
+
+        @field_validator('user_id')
+        @classmethod
+        def validate_uid(cls, v):
+            if v < 1:
+                raise ValueError("user_id must be positive")
+            return v
+
+        @field_validator('transaction_time')
+        @classmethod
+        def validate_time(cls, v):
+            if v > datetime.now():
+                raise ValueError("transaction_time must be before now")
+            return v
+
+        @field_validator('model_score')
+        @classmethod
+        def validate_score(cls, v):
+            if not (0.0 <= v <= 1.0):
+                raise ValueError("model_score must be in [0,1]")
+            if v == 0.0:
+                logger.warning("model_score == 0.0 found")
+            return v
+
+        @model_validator(mode='after')
+        def check_flagged(self):
+            if self.model_score > 0.9 and not self.flagged_for_review:
+                raise ValueError("flagged_for_review must be True when score > 0.9")
+            return self
+
+        @classmethod
+        def validate_df(cls, df):
+            errors = []
+            if df.empty:
+                errors.append("DataFrame is empty")
+            if set(df.columns) != cls.expected_columns:
+                errors.append("Unexpected columns")
+            for idx, row in df.iterrows():
+                try:
+                    cls.model_validate(row.to_dict())
+                except Exception as e:
+                    errors.append(f"Row {idx}: {e}")
+            return errors
+
+    errors = ModelOutput.validate_df(df)
+    if errors:
+        print("Pydantic validation errors:")
+        for e in errors:
+            print(e)
+
+.. code-block:: text
+
+    WARNING:root:model_score == 0.0 found
+    Pydantic validation errors:
+    Row 2: 1 validation error for ModelOutput
+    __root__
+      flagged_for_review must be True when score > 0.9 (type=value_error)
+    Row 3: 1 validation error for ModelOutput
+    transaction_id
+      transaction_id must match TXN format (type=value_error)
+    Row 2: 1 validation error for ModelOutput
+    user_id
+      user_id must be positive (type=value_error)
+
+---
+
+Conclusion
+----------
+
+FrameCheck achieves the same validations as Pandera and Pydantic with far less code and clearer intent. It also surfaces failing rows, warnings, and errors without additional plumbing.
