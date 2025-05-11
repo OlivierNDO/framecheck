@@ -440,26 +440,28 @@ Pandera (with row capture added manually)
         print("Pandera errors:")
         print(e.failure_cases[['column', 'failure_case', 'index']])
 
-.. code-block:: text
-Warning: model_score == 0.0 found
----------------------------------------------------------------------------
-SchemaError                               Traceback (most recent call last)
-<ipython-input-25-d8d5f408d13b> in <cell line: 0>()
-     26 
-     27 try:
----> 28     validated_df = schema.validate(df)
-     29 except pa.errors.SchemaErrors as e:
-     30     print("Pandera errors:")
+::
 
-13 frames
-/usr/local/lib/python3.11/dist-packages/pandera/api/base/error_handler.py in collect_error(self, error_type, reason_code, schema_error, original_exc)
-     52         """
-     53         if not self._lazy:
----> 54             raise schema_error from original_exc
-     55 
-     56         # delete data of validated object from SchemaError object to prevent
+    Warning: model_score == 0.0 found
+    ---------------------------------------------------------------------------
+    SchemaError                               Traceback (most recent call last)
+    <ipython-input-25-d8d5f408d13b> in <cell line: 0>()
+         26 
+         27 try:
+    ---> 28     validated_df = schema.validate(df)
+         29 except pa.errors.SchemaErrors as e:
+         30     print("Pandera errors:")
 
-SchemaError: Column 'transaction_id' failed element-wise validator number 0: str_matches('^TXN\d{4,}$') failure cases: NUM9999
+    13 frames
+    /usr/local/lib/python3.11/dist-packages/pandera/api/base/error_handler.py in collect_error(self, error_type, reason_code, schema_error, original_exc)
+         52         """
+         53         if not self._lazy:
+    ---> 54             raise schema_error from original_exc
+         55 
+         56         # delete data of validated object from SchemaError object to prevent
+
+    SchemaError: Column 'transaction_id' failed element-wise validator number 0: str_matches('^TXN\\d{4,}$') failure cases: NUM9999
+
 
 .. note::
 
@@ -467,6 +469,7 @@ SchemaError: Column 'transaction_id' failed element-wise validator number 0: str
    In this case, `transaction_id='NUM9999'` violates the regex constraint and halts validation.
    Other issues, like `user_id=-1`, are not reported until the first error is resolved.
    This differs from FrameCheck, which collects all validation issues in a single pass.
+
 
 
 ---
