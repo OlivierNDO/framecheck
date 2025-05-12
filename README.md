@@ -37,6 +37,24 @@ Try FrameCheck without installing anything - click the badge above to run an int
 
 ---
 
+## Why Should You Validate Your Data Explicitly?
+
+Because during a routine update, a typo like this:
+
+```sql
+SELECT u.credit_score AS age
+FROM users u
+JOIN profiles p ON u.id = p.user_id
+```
+...fails silently.
+
+Now your age column has values in the 700s.
+
+Your SQL doesn't error, your model still runs — and makes terrible predictions.
+
+
+---
+
 ## 🔥 Example: Catch Bad Model Output Before It Hits Production
 
 ```python
