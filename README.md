@@ -1,6 +1,7 @@
 
 # <img src="images/logo.png" alt="Project Logo" width="512" height="125">
 
+![PyPI](https://img.shields.io/pypi/v/framecheck)
 [![codecov](https://codecov.io/gh/OlivierNDO/framecheck/branch/main/graph/badge.svg)](https://codecov.io/gh/OlivierNDO/framecheck)
 [![Documentation Status](https://readthedocs.org/projects/framecheck/badge/?version=latest)](https://framecheck.readthedocs.io/en/latest/)
 
