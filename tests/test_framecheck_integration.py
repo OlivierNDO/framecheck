@@ -1,3 +1,4 @@
+"""Integration tests for main FrameCheck class"""
 import unittest
 from unittest.mock import patch
 import pandas as pd
@@ -7,40 +8,47 @@ from framecheck.frame_check import FrameCheck
 
 
 class TestFrameCheckDataFrameChecks(unittest.TestCase):
-
+    """
+    Test suite for FrameCheck integration with DataFrame-level checks,
+    including column validations, null constraints, row counts, and uniqueness.
+    """
     def test_columns_applies_check_to_multiple_fields(self):
+        """Test fails when multiple columns exceed max constraint."""
         df = pd.DataFrame({
             'age': [25, 18, 85.0],
             'score': [32, 50, 75]
         })
         schema = FrameCheck().columns(['age', 'score'], type='float', max=70)
         result = schema.validate(df)
-        
+
         self.assertFalse(result.is_valid)
         self.assertEqual(len(result.errors), 2)
-        self.assertIn('greater than', result.errors[0])    
-        
+        self.assertIn('greater than', result.errors[0])
+
     def test_empty_check_via_framecheck(self):
+        """Test passes when DataFrame is empty and schema expects emptiness."""
         df = pd.DataFrame(columns=['a'])
         schema = FrameCheck().empty()
         result = schema.validate(df)
         self.assertTrue(result.is_valid)
-    
+
     def test_not_empty_check_via_framecheck(self):
+        """Test passes when DataFrame is not empty and schema expects data."""
         df = pd.DataFrame({'a': [1]})
         schema = FrameCheck().not_empty()
         result = schema.validate(df)
         self.assertTrue(result.is_valid)
-        
+
     def test_not_null_column_fails_on_nulls(self):
+        """Test fails when not_null=True and column contains nulls."""
         df = pd.DataFrame({'age': [20, None, 35]})
         schema = FrameCheck().column('age', type='float', not_null=True)
         result = schema.validate(df)
         self.assertFalse(result.is_valid)
         self.assertIn('missing values', result.summary())
 
-        
     def test_raise_on_error_raises_exception_on_failure(self):
+        """Test raises ValueError when raise_on_error is enabled and validation fails."""
         df = pd.DataFrame({'score': [0.5, 1.5]})  # 1.5 > 1.0 should fail
         schema = (
             FrameCheck()
@@ -52,6 +60,7 @@ class TestFrameCheckDataFrameChecks(unittest.TestCase):
         self.assertIn("FrameCheck validation failed", str(context.exception))
 
     def test_row_count_argument_validation(self):
+        """Test raises ValueError when both exact and bounds are provided."""
         with self.assertRaises(ValueError) as context:
             FrameCheck().row_count(5, exact=5)
         self.assertIn("do not also pass", str(context.exception))
@@ -65,6 +74,7 @@ class TestFrameCheckDataFrameChecks(unittest.TestCase):
         self.assertIn("do not also pass", str(context.exception))
 
     def test_row_count_exact_and_bounds(self):
+        """Test exact, min, and max row count validation behavior."""
         df = pd.DataFrame({'a': [1, 2, 3]})
 
         result_exact_pass = FrameCheck().row_count(3).validate(df)
@@ -81,8 +91,9 @@ class TestFrameCheckDataFrameChecks(unittest.TestCase):
         result_max_fail = FrameCheck().row_count(max=2).validate(df)
         self.assertFalse(result_max_fail.is_valid)
         self.assertIn('at most 2', result_max_fail.errors[0])
-        
+
     def test_unique_check_via_framecheck(self):
+        """Test fails when column is not unique and uniqueness is required."""
         df = pd.DataFrame({'a': [1, 2, 2]})
         schema = FrameCheck().column('a', type='int').unique(columns=['a'])
         result = schema.validate(df)
@@ -90,8 +101,12 @@ class TestFrameCheckDataFrameChecks(unittest.TestCase):
 
 
 class TestFrameCheckWithCustomCheck(unittest.TestCase):
-
+    """
+    Test suite for FrameCheck with custom row-level checks, validating logical
+    conditions that combine multiple columns.
+    """
     def test_custom_check_integration(self):
+        """Test fails when custom condition is violated on any row."""
         df = pd.DataFrame({
             'model_score': [0.1, 0.95, 0.8],
             'flagged_for_review': [False, False, False]
@@ -109,6 +124,7 @@ class TestFrameCheckWithCustomCheck(unittest.TestCase):
         self.assertFalse(result.is_valid)
         self.assertIn("flagged_for_review must be True", result.summary())
         self.assertEqual(result._failing_row_indices, {1})
+
 
 class TestMultipleChecksSameColumn(unittest.TestCase):
     """Tests handling of multiple sequential checks applied to the same column."""

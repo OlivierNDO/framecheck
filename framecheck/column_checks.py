@@ -9,7 +9,7 @@ from decimal import Decimal
 import numbers
 import numpy as np
 import pandas as pd
-from typing import Any, Callable, List, Optional, Union
+from typing import Any, List, Optional, Union
 from framecheck.utilities import CheckFactory
 
 
@@ -269,17 +269,17 @@ class DatetimeColumnCheck(ColumnCheck):
                 value_lower = value.lower()
                 if value_lower == 'today':
                     return datetime.today().replace(hour=0, minute=0, second=0, microsecond=0)
-                elif value_lower == 'now':
+                if value_lower == 'now':
                     return datetime.now()
-                elif value_lower == 'yesterday':
+                if value_lower == 'yesterday':
                     return (datetime.today() - timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
-                elif value_lower == 'tomorrow':
+                if value_lower == 'tomorrow':
                     return (datetime.today() + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
-                elif self.format:
+                if self.format:
                     try:
                         return datetime.strptime(value, self.format)
-                    except ValueError:
-                        raise ValueError(f"Failed to parse {bound_name}='{value}' using format='{self.format}'")
+                    except ValueError as exc:
+                        raise ValueError(f"Failed to parse {bound_name}='{value}' using format='{self.format}'") from exc
                 else:
                     return pd.to_datetime(value)
             raise TypeError(f"{bound_name} must be a string or datetime, not {type(value)}")
@@ -325,8 +325,8 @@ class DatetimeColumnCheck(ColumnCheck):
 
         try:
             coerced = pd.to_datetime(series, format=self.format, errors='coerce')
-        except Exception:
-            raise ValueError(f"Could not coerce values in '{self.column_name}' using format='{self.format}'")
+        except Exception as exc:
+            raise ValueError(f"Could not coerce values in '{self.column_name}' using format='{self.format}'") from exc
 
         invalid_mask = coerced.isna() & series.notna()
         if invalid_mask.any():

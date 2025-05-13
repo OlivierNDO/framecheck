@@ -44,6 +44,150 @@ class DataFrameCheck:
         raise NotImplementedError("Subclasses must implement validate()")
 
 
+class ColumnComparisonCheck(DataFrameCheck):
+    """
+    Check that compares values between two columns using specified operators.
+
+    This check validates that the relationship between values in two columns
+    satisfies the specified comparison operator. It supports numeric, string,
+    and datetime comparisons with type inference or explicit type specification.
+
+    Parameters
+    ----------
+    left_column : str
+        Name of the first column to compare.
+    operator : str
+        Comparison operator: "<", "<=", "==", "!=", ">=", or ">".
+    right_column : str
+        Name of the second column to compare.
+    comparison_type : str, optional
+        Type of comparison to perform: 'numeric', 'string', 'datetime'.
+        If not specified, will attempt to infer from column types.
+    description : str, optional
+        Custom description for validation failures.
+    raise_on_fail : bool, optional
+        Whether failure raises an error or warning.
+
+    Examples
+    --------
+    >>> check = ColumnComparisonCheck('price', '>', 'cost')
+    >>> result = check.validate(df)
+    
+    >>> # With explicit type and custom message
+    >>> check = ColumnComparisonCheck('end_date', '>', 'start_date', 
+    ...                               comparison_type='datetime',
+    ...                               description="End date must be after start date")
+    """
+    def __init__(
+        self,
+        left_column: str,
+        operator: str,
+        right_column: str,
+        comparison_type: Optional[str] = None,
+        description: Optional[str] = None,
+        raise_on_fail: bool = True
+    ):
+        super().__init__(raise_on_fail)
+        self.left_column = left_column
+        self.operator = operator
+        self.right_column = right_column
+        self.comparison_type = comparison_type
+
+        # Define supported operators
+        self.operators = {
+            "<": lambda a, b: a < b,
+            "<=": lambda a, b: a <= b,
+            "==": lambda a, b: a == b,
+            "!=": lambda a, b: a != b,
+            ">=": lambda a, b: a >= b,
+            ">": lambda a, b: a > b
+        }
+
+        if operator not in self.operators:
+            raise ValueError(f"Operator must be one of: {', '.join(self.operators.keys())}")
+
+        self.description = description or f"Column '{left_column}' must be {operator} column '{right_column}'"
+
+    def validate(self, df: pd.DataFrame) -> dict:
+        """
+        Validate the column comparison constraint.
+
+        Parameters
+        ----------
+        df : pd.DataFrame
+            DataFrame to validate.
+
+        Returns
+        -------
+        dict
+            Dictionary with 'messages' and 'failing_indices'.
+        """
+        messages = []
+        failing_indices = set()
+
+        # First check if both columns exist
+        if self.left_column not in df.columns:
+            messages.append(f"Column '{self.left_column}' does not exist for comparison.")
+            return {"messages": messages, "failing_indices": failing_indices}
+
+        if self.right_column not in df.columns:
+            messages.append(f"Column '{self.right_column}' does not exist for comparison.")
+            return {"messages": messages, "failing_indices": failing_indices}
+
+        # Determine comparison type if not explicitly provided
+        comparison_type = self.comparison_type
+
+        if not comparison_type:
+            # Look at column dtypes to infer comparison type
+            left_dtype = str(df[self.left_column].dtype)
+            right_dtype = str(df[self.right_column].dtype)
+            
+            if 'datetime' in left_dtype or 'datetime' in right_dtype:
+                comparison_type = 'datetime'
+            elif ('int' in left_dtype and 'int' in right_dtype) or \
+                 ('float' in left_dtype and 'float' in right_dtype) or \
+                 ('int' in left_dtype and 'float' in right_dtype) or \
+                 ('float' in left_dtype and 'int' in right_dtype):
+                comparison_type = 'numeric'
+
+        # Apply the comparison row by row
+        for idx, row in df.iterrows():
+            left_val = row[self.left_column]
+            right_val = row[self.right_column]
+
+            # Handle null values
+            if pd.isna(left_val) or pd.isna(right_val):
+                failing_indices.add(idx)
+                continue
+
+            # Apply type-specific handling
+            if comparison_type == 'datetime':
+                try:
+                    left_val = pd.to_datetime(left_val)
+                    right_val = pd.to_datetime(right_val)
+                except (ValueError, TypeError):
+                    failing_indices.add(idx)
+                    continue
+            elif comparison_type == 'numeric':
+                try:
+                    left_val = float(left_val)
+                    right_val = float(right_val)
+                except (ValueError, TypeError):
+                    failing_indices.add(idx)
+                    continue
+
+            # Perform the comparison
+            try:
+                if not self.operators[self.operator](left_val, right_val):
+                    failing_indices.add(idx)
+            except TypeError:
+                failing_indices.add(idx)
+
+        if failing_indices:
+            messages.append(f"{self.description} (failed on {len(failing_indices)} row(s))")
+        return {"messages": messages, "failing_indices": failing_indices}
+
+
 class CustomCheck(DataFrameCheck):
     """
     User-defined custom validation function.
@@ -352,5 +496,4 @@ class RowCountCheck(DataFrameCheck):
             messages.append(
                 f"DataFrame must have at most {self.max} rows (found {row_count})."
             )
-
         return {"messages": messages, "failing_indices": set()}

@@ -6,11 +6,8 @@ Validation engine for pandas DataFrames using composable column and DataFrame ch
 This module provides the core FrameCheck API, including Schema and ValidationResult
 objects, that allow declarative data validation and rule chaining.
 """
-
-import sys
-import logging
 import pandas as pd
-from typing import Union, List, Set, Optional, Dict, Any, Literal
+from typing import List, Set, Optional, Dict, Any, Literal
 import warnings
 
 from framecheck.column_checks import (
@@ -23,6 +20,7 @@ from framecheck.column_checks import (
 )
 
 from framecheck.dataframe_checks import (
+    ColumnComparisonCheck,
     CustomCheck,
     DataFrameCheck,
     DefinedColumnsOnlyCheck,
@@ -501,6 +499,74 @@ class FrameCheck:
         """
         self.df_checks.append(ExactColumnsCheck(expected_columns, raise_on_fail=not warn_only))
         return self
+    
+    def compare(
+        self,
+        left_column: str,
+        operator: Literal["<", "<=", "==", "!=", ">=", ">"],
+        right_column: str,
+        type: Optional[str] = None,
+        description: Optional[str] = None,
+        warn_only: bool = False
+    ) -> 'FrameCheck':
+        """
+        Add a check comparing values between two columns.
+    
+        This method creates a validation rule that ensures values in one column
+        have the specified relationship to values in another column. It's useful
+        for validating business rules like "price > cost" or "end_date > start_date".
+    
+        Parameters
+        ----------
+        left_column : str
+            Name of the first column to compare.
+        operator : str
+            Comparison operator: "<", "<=", "==", "!=", ">=", or ">".
+        right_column : str
+            Name of the second column to compare.
+        type : str, optional
+            Type of comparison to perform: 'numeric', 'string', 'datetime'.
+            If not specified, will try to infer from column types.
+        description : str, optional
+            Custom description for the validation message.
+        warn_only : bool, optional
+            If True, failures are warnings instead of errors.
+    
+        Returns
+        -------
+        FrameCheck
+            The updated FrameCheck instance.
+    
+        Examples
+        --------
+        >>> schema = (FrameCheck()
+        ...     .column('price', type='float')
+        ...     .column('cost', type='float')
+        ...     .compare('price', '>', 'cost')
+        ...     .not_null()
+        ... )
+        
+        >>> # With date comparison and custom error
+        >>> schema = (FrameCheck()
+        ...     .column('start_date', type='datetime')
+        ...     .column('end_date', type='datetime')
+        ...     .compare('end_date', '>', 'start_date',
+        ...             type='datetime',
+        ...             description="End date must be after start date")
+        ... )
+        """
+        self._dataframe_checks.append(
+            ColumnComparisonCheck(
+                left_column=left_column,
+                operator=operator,
+                right_column=right_column,
+                comparison_type=type,
+                description=description,
+                raise_on_fail=not warn_only
+            )
+        )
+        return self
+    
     
     def custom_check(self, function, description: Optional[str] = None) -> 'FrameCheck':
         """
