@@ -8,6 +8,7 @@ and optionally failing row indices.
 
 import pandas as pd
 from typing import Optional, List, Dict, Set
+from framecheck.function_registry import is_registered, get_registry_name, get_registered_function
 
 
 class DataFrameCheck:
@@ -205,6 +206,7 @@ class CustomCheck(DataFrameCheck):
         super().__init__(raise_on_fail)
         self.function = function
         self.description = description or "Custom check failed"
+        self.registry_name = get_registry_name(function) if is_registered(function) else None
 
     def validate(self, df: pd.DataFrame) -> dict:
         """
@@ -240,6 +242,14 @@ class DefinedColumnsOnlyCheck(DataFrameCheck):
     def __init__(self, expected_columns: List[str], raise_on_fail: bool = True):
         super().__init__(raise_on_fail)
         self.expected_columns = set(expected_columns)
+        
+    @staticmethod
+    def _serialize_defined_columns_check(check) -> dict:
+        """Serialize DefinedColumnsOnlyCheck."""
+        result = {}
+        if hasattr(check, "expected_columns"):
+            result["expected_columns"] = list(check.expected_columns)
+        return result
 
     def validate(self, df: pd.DataFrame) -> dict:
         """

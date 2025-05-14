@@ -33,3 +33,16 @@ Custom Checks
 Validation Execution
 --------------------
 .. autofunction:: framecheck.FrameCheck.validate
+
+Persistence
+----------
+.. autofunction:: framecheck.FrameCheck.export
+.. autofunction:: framecheck.FrameCheck.to_json
+.. autofunction:: framecheck.FrameCheck.to_dict
+.. autofunction:: framecheck.FrameCheck.load
+.. autofunction:: framecheck.FrameCheck.from_json
+.. autofunction:: framecheck.FrameCheck.from_dict
+
+Function Registry
+----------------
+.. autofunction:: framecheck.register_check_function

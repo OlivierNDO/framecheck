@@ -32,3 +32,17 @@ framecheck.utilities
     :members:
     :undoc-members:
     :show-inheritance:
+
+framecheck.persistence
+---------------------
+.. automodule:: framecheck.persistence
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
+framecheck.function_registry
+---------------------------
+.. automodule:: framecheck.function_registry
+    :members:
+    :undoc-members:
+    :show-inheritance:

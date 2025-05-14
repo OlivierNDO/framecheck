@@ -63,7 +63,7 @@ Your SQL doesn't error, your model still runs — and makes terrible predictions
 
 ```python
 import pandas as pd
-from framecheck import FrameCheck
+from framecheck import FrameCheck, register_check_function
 
 df = pd.DataFrame({
     'transaction_id': ['TXN1001', 'TXN1002', 'TXN1003'],
@@ -74,7 +74,11 @@ df = pd.DataFrame({
     'flagged_for_review': [False, True, False]
 })
 
-schema = (
+@register_check_function(name="high_score_is_flagged")
+def high_score_is_flagged(row):
+    return row['model_score'] <= 0.9 or row['flagged_for_review'] is True
+
+model_score_validator = (
     FrameCheck()
     .column('transaction_id', type='string', regex=r'^TXN\d{4,}$')
     .column('user_id', type='int', min=1)
@@ -84,7 +88,7 @@ schema = (
     .column('model_version', type='string')
     .column('flagged_for_review', type='bool')
     .custom_check(
-        lambda row: row['model_score'] <= 0.9 or row['flagged_for_review'] is True,
+        high_score_is_flagged,
         "flagged_for_review must be True when model_score > 0.9"
     )
     .not_null()
@@ -92,7 +96,7 @@ schema = (
     .only_defined_columns()
 )
 
-result = schema.validate(df)
+result = model_score_validator.validate(df)
 
 if not result.is_valid:
     print(result.summary())
@@ -117,6 +121,16 @@ invalid_rows = result.get_invalid_rows(df, include_warnings = True)
 | transaction_id | user_id | transaction_time     | model_score | model_version | flagged_for_review |
 |----------------|---------|----------------------|-------------|----------------|---------------------|
 | TXN1003        | 503     | 2024-04-15 09:01:37  | 0.95        | v2.1.0         | False               |
+
+
+## 📋 Save & Reuse Validation Rules
+```python
+model_score_validator.save('transaction_validator.json')
+
+loaded_validator = FrameCheck.load('transaction_validator.json')
+
+result = loaded_validator.validate(df)
+```
 
 
 ---

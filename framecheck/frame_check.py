@@ -18,7 +18,6 @@ from framecheck.column_checks import (
     IntColumnCheck,
     StringColumnCheck
 )
-
 from framecheck.dataframe_checks import (
     ColumnComparisonCheck,
     CustomCheck,
@@ -31,10 +30,9 @@ from framecheck.dataframe_checks import (
     RowCountCheck,
     UniquenessCheck
 )
-
+from framecheck.persistence import FrameCheckPersistence
 from framecheck.utilities import CheckFactory
-
-
+from framecheck.function_registry import get_registered_function, register_check_function
 
 
 class FrameCheckWarning(UserWarning):
@@ -571,22 +569,64 @@ class FrameCheck:
     def custom_check(self, function, description: Optional[str] = None) -> 'FrameCheck':
         """
         Add a custom user-defined validation function.
-
+    
         Parameters
         ----------
-        function : Callable[[pd.DataFrame], dict]
-            A function that returns a dict with 'messages' and 'failing_indices'.
+        function : Callable
+            A function that returns True for valid rows, False otherwise.
+            For persistence across sessions, use @register_check_function decorator.
         description : str, optional
             Description of the custom check.
-
+    
         Returns
         -------
         FrameCheck
             The updated FrameCheck instance.
+        
+        Examples
+        --------
+        >>> # Using a lambda (not serializable)
+        >>> check = FrameCheck().custom_check(lambda row: row['age'] >= 18, "Must be adult")
+        >>>
+        >>> # Using a registered function (serializable)
+        >>> @register_check_function()
+        >>> def valid_age(row):
+        ...     return row['age'] >= 18
+        >>>
+        >>> check = FrameCheck().custom_check(valid_age, "Must be adult")
         """
         self._dataframe_checks.append(CustomCheck(function=function, description=description))
         return self
-
+    
+    
+    def registered_check(self, function_name: str, description: Optional[str] = None) -> 'FrameCheck':
+        """
+        Add a custom check using a registered function name.
+    
+        Parameters
+        ----------
+        function_name : str
+            Name of a registered function.
+        description : str, optional
+            Description of the custom check.
+    
+        Returns
+        -------
+        FrameCheck
+            The updated FrameCheck instance.
+            
+        Raises
+        ------
+        ValueError
+            If the function name is not registered.
+        """
+        func = get_registered_function(function_name)
+        if not func:
+            raise ValueError(f"No registered function found with name '{function_name}'")
+        
+        return self.custom_check(func, description)
+        
+    
     def validate(self, df: pd.DataFrame) -> ValidationResult:
         """
         Run all defined checks against the provided DataFrame.
@@ -650,3 +690,95 @@ class FrameCheck:
         else:
             self._emit_errors(errors)
         return result
+    
+    def to_dict(self) -> dict:
+        """
+        Convert validation rules to a serializable dictionary.
+        
+        Returns
+        -------
+        dict
+            Dictionary representation of validation rules.
+        """
+        return FrameCheckPersistence.to_dict(self)
+    
+    def to_json(self) -> str:
+        """
+        Convert validation rules to a JSON string.
+        
+        Returns
+        -------
+        str
+            JSON representation of validation rules.
+        """
+        return FrameCheckPersistence.to_json(self)
+    
+    def save(self, filepath: str) -> None:
+        """
+        Export validation rules to a file.
+        
+        Parameters
+        ----------
+        filepath : str
+            Path to the output file, should end with .json
+            
+        Raises
+        ------
+        ValueError
+            If the file extension is unsupported.
+        """
+        FrameCheckPersistence.export(self, filepath)
+    
+    @classmethod
+    def from_dict(cls, data: dict) -> 'FrameCheck':
+        """
+        Create a FrameCheck instance from a dictionary.
+        
+        Parameters
+        ----------
+        data : dict
+            Dictionary containing serialized validation rules.
+            
+        Returns
+        -------
+        FrameCheck
+            Reconstructed FrameCheck instance.
+        """
+        return FrameCheckPersistence.from_dict(data, cls)
+    
+    @classmethod
+    def from_json(cls, json_str: str) -> 'FrameCheck':
+        """
+        Create a FrameCheck instance from a JSON string.
+        
+        Parameters
+        ----------
+        json_str : str
+            JSON string containing serialized validation rules.
+            
+        Returns
+        -------
+        FrameCheck
+            Reconstructed FrameCheck instance.
+        """
+        return FrameCheckPersistence.from_json(json_str, cls)
+    
+    @classmethod
+    def load(cls, filepath: str) -> 'FrameCheck':
+        """
+        Load a FrameCheck instance from a file.
+        
+        Parameters
+        ----------
+        filepath : str
+            Path to the input file.
+            
+        Returns
+        -------
+        FrameCheck
+            Reconstructed FrameCheck instance.
+        """
+        return FrameCheckPersistence.load(filepath, cls)
+    
+    
+    
