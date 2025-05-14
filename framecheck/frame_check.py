@@ -495,7 +495,9 @@ class FrameCheck:
         FrameCheck
             The updated FrameCheck instance.
         """
-        self.df_checks.append(ExactColumnsCheck(expected_columns, raise_on_fail=not warn_only))
+        self._dataframe_checks.append(
+            ExactColumnsCheck(expected_columns, raise_on_fail=not warn_only)
+        )
         return self
     
     def compare(

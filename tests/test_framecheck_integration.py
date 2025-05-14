@@ -5,7 +5,12 @@ import pandas as pd
 import numpy as np
 from decimal import Decimal
 from framecheck.frame_check import FrameCheck
+from framecheck.function_registry import register_check_function
 
+
+@register_check_function()
+def _always_fail(row):
+    return False
 
 class TestFrameCheckDataFrameChecks(unittest.TestCase):
     """
@@ -24,6 +29,13 @@ class TestFrameCheckDataFrameChecks(unittest.TestCase):
         self.assertFalse(result.is_valid)
         self.assertEqual(len(result.errors), 2)
         self.assertIn('greater than', result.errors[0])
+        
+    def test_columns_are_enforced(self):
+        """Test columns_are() method"""
+        df = pd.DataFrame({'a': [1], 'b': [2]})
+        schema = FrameCheck().columns_are(['a'])  # b is unexpected
+        result = schema.validate(df)
+        self.assertIn('Unexpected column(s)', result.summary())
 
     def test_empty_check_via_framecheck(self):
         """Test passes when DataFrame is empty and schema expects emptiness."""
@@ -58,6 +70,19 @@ class TestFrameCheckDataFrameChecks(unittest.TestCase):
         with self.assertRaises(ValueError) as context:
             schema.validate(df)
         self.assertIn("FrameCheck validation failed", str(context.exception))
+        
+    def test_registered_check_fails(self):
+        """Test that registered_check creates a custom message"""
+        df = pd.DataFrame({'x': [1, 2, 3]})
+        schema = FrameCheck().registered_check('_always_fail', description='x is never valid')
+        result = schema.validate(df)
+        self.assertIn('x is never valid', result.summary())
+        
+    def test_registered_check_invalid_name(self):
+        """Ensure nonexistent check message is created"""
+        with self.assertRaises(ValueError) as context:
+            FrameCheck().registered_check('nonexistent_check')
+        self.assertIn("No registered function found", str(context.exception))
 
     def test_row_count_argument_validation(self):
         """Test raises ValueError when both exact and bounds are provided."""

@@ -55,6 +55,36 @@ class TestColumnComparisonCheck(unittest.TestCase):
         
         # Empty dataframe
         self.empty_df = pd.DataFrame()
+        
+    def test_date_before(self):
+        """Test '<' operator with date columns."""
+        check = ColumnComparisonCheck('start_date', '<', 'end_date', comparison_type='datetime')
+        result = check.validate(self.date_df)
+        # start_date < end_date should be false for [2023-02-01 < 2023-01-15] (index 1)
+        # and indices with None/invalid (3, 4, 5)
+        expected_failing = {1, 3, 4, 5}
+        self.assertEqual(result['failing_indices'], expected_failing)
+
+    def test_date_after(self):
+        """Test '>' operator with date columns."""
+        check = ColumnComparisonCheck('end_date', '>', 'start_date', comparison_type='datetime')
+        result = check.validate(self.date_df)
+        # end_date > start_date should be false for [2023-01-15 > 2023-02-01] (index 1)
+        # and index 3 (None in start_date) and index 4 (None in end_date) and index 5 (invalid date)
+        expected_failing = {1, 3, 4, 5}
+        self.assertEqual(result['failing_indices'], expected_failing)
+        
+    def test_infer_datetime_comparison_type(self):
+        """Test that comparison_type is inferred as datetime and fails correctly."""
+        df = pd.DataFrame({
+            'left': ['2023-01-03'],  # later date
+            'right': ['2023-01-02']  # earlier date
+        })
+        check = ColumnComparisonCheck('left', '<', 'right')  # should infer datetime
+        result = check.validate(df)
+        self.assertEqual(result['failing_indices'], {0})
+        self.assertIn("left", result['messages'][0])
+        self.assertIn("<", result['messages'][0])
 
     def test_numeric_greater_than(self):
         """Test '>' operator with numeric columns."""
@@ -93,45 +123,12 @@ class TestColumnComparisonCheck(unittest.TestCase):
         expected_failing = {1, 3, 4, 5}
         self.assertEqual(result['failing_indices'], expected_failing)
 
-    def test_date_before(self):
-        """Test '<' operator with date columns."""
-        check = ColumnComparisonCheck('start_date', '<', 'end_date', comparison_type='datetime')
-        result = check.validate(self.date_df)
-        # start_date < end_date should be false for [2023-02-01 < 2023-01-15] (index 1)
-        # and indices with None/invalid (3, 4, 5)
-        expected_failing = {1, 3, 4, 5}
-        self.assertEqual(result['failing_indices'], expected_failing)
-
-    def test_date_after(self):
-        """Test '>' operator with date columns."""
-        check = ColumnComparisonCheck('end_date', '>', 'start_date', comparison_type='datetime')
-        result = check.validate(self.date_df)
-        # end_date > start_date should be false for [2023-01-15 > 2023-02-01] (index 1)
-        # and index 3 (None in start_date) and index 4 (None in end_date) and index 5 (invalid date)
-        expected_failing = {1, 3, 4, 5}
-        self.assertEqual(result['failing_indices'], expected_failing)
-
-    def test_string_comparison(self):
-        """Test string comparisons."""
-        check = ColumnComparisonCheck('first_name', '!=', 'last_name')
-        result = check.validate(self.string_df)
-        # They should all be different except for None values
-        expected_failing = {3, 4}
-        self.assertEqual(result['failing_indices'], expected_failing)
-
-    def test_string_greater_than(self):
-        """Test '>' operator with string columns (lexicographical comparison)."""
-        check = ColumnComparisonCheck('first_name', '>', 'last_name')
-        result = check.validate(self.string_df)
-        # Lexicographical comparison - in this specific case:
-        # 'Alice' > 'Adams' is TRUE (A=A, but l>d)
-        # 'Bob' > 'Baker' is TRUE (B=B, but o>a)
-        # 'Charlie' > 'Collins' is FALSE (C=C, h<o)
-        # None comparison fails
-        # 'Eve' > None fails
-        # '' > 'Franklin' is FALSE
-        expected_failing = {2, 3, 4, 5}  # Indices 0 and 1 pass lexicographical comparison
-        self.assertEqual(result['failing_indices'], expected_failing)
+    def test_missing_right_column(self):
+        """Test behavior when right column doesn't exist."""
+        check = ColumnComparisonCheck('a', '>', 'missing_col')
+        result = check.validate(self.numeric_df)
+        self.assertIn("does not exist for comparison", result['messages'][0])
+        self.assertEqual(result['failing_indices'], set())
 
     def test_numeric_string_comparison(self):
         """Test comparison between numeric column and string representation."""
@@ -178,6 +175,38 @@ class TestColumnComparisonCheck(unittest.TestCase):
         # Rows with null in either column should fail
         self.assertIn(3, result['failing_indices'])  # null in column a
         self.assertIn(4, result['failing_indices'])  # null in column b
+        
+    def test_string_comparison(self):
+        """Test string comparisons."""
+        check = ColumnComparisonCheck('first_name', '!=', 'last_name')
+        result = check.validate(self.string_df)
+        # They should all be different except for None values
+        expected_failing = {3, 4}
+        self.assertEqual(result['failing_indices'], expected_failing)
+
+    def test_string_greater_than(self):
+        """Test '>' operator with string columns (lexicographical comparison)."""
+        check = ColumnComparisonCheck('first_name', '>', 'last_name')
+        result = check.validate(self.string_df)
+        # Lexicographical comparison - in this specific case:
+        # 'Alice' > 'Adams' is TRUE (A=A, but l>d)
+        # 'Bob' > 'Baker' is TRUE (B=B, but o>a)
+        # 'Charlie' > 'Collins' is FALSE (C=C, h<o)
+        # None comparison fails
+        # 'Eve' > None fails
+        # '' > 'Franklin' is FALSE
+        expected_failing = {2, 3, 4, 5}  # Indices 0 and 1 pass lexicographical comparison
+        self.assertEqual(result['failing_indices'], expected_failing)
+        
+    def test_type_error_during_operator_comparison(self):
+        """Test TypeError raised during direct comparison logic."""
+        df = pd.DataFrame({
+            'a': [lambda x: x],  # a function — not comparable
+            'b': [42]
+        })
+        check = ColumnComparisonCheck('a', '>', 'b')  # This will hit operator > between function and int
+        result = check.validate(df)
+        self.assertIn(0, result['failing_indices'])
 
     def test_type_inference(self):
         """Test type inference when no explicit type is provided."""
@@ -368,6 +397,13 @@ class TestDefinedColumnsOnlyCheck(unittest.TestCase):
         self.assertTrue(result['messages'])
         self.assertIn("Unexpected columns", result['messages'][0])
         self.assertEqual(result['failing_indices'], set())
+        
+    def test_serialize_defined_columns_check(self):
+        """Test the serialization of DefinedColumnsOnlyCheck."""
+        check = DefinedColumnsOnlyCheck(expected_columns=['a', 'b'])
+        result = DefinedColumnsOnlyCheck._serialize_defined_columns_check(check)
+        self.assertEqual(set(result['expected_columns']), {'a', 'b'})
+
 
 
 class TestExactColumnsCheck(unittest.TestCase):
