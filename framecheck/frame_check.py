@@ -262,40 +262,62 @@ class FrameCheck:
     ----------
     log_errors : bool, optional
         Whether to emit validation errors and warnings as runtime warnings.
+    logger : logging.Logger, optional
+        A logger instance to use for validation messages. If provided, 
+        validation errors and warnings will be sent to the logger instead
+        of using the warnings module.
     """
-    def __init__(self, log_errors: bool = True):
+    def __init__(self, log_errors: bool = True, logger=None):
         self._column_checks = []
         self._dataframe_checks = []
         self._finalized = False
         self._show_warnings = log_errors
         self._raise_on_error = False
-        warnings.simplefilter('always', FrameCheckWarning)
+        self._logger = logger
+        
+        # If using warnings (no logger), configure warning filter
+        if log_errors and not logger:
+            warnings.simplefilter('always', FrameCheckWarning)
 
     def _emit_warnings(self, warning_messages: List[str]):
         """
-        Emit validation warnings using the FrameCheckWarning class.
+        Emit validation warnings using logger or warning system.
     
         Parameters
         ----------
         warning_messages : list of str
-            Warning messages to emit as a formatted multi-line warning.
+            Warning messages to emit.
         """
-        if warning_messages:
-            full_message = "\n".join(f"- {msg}" for msg in warning_messages)
-            warnings.warn(f"FrameCheck validation warnings:\n{full_message}", FrameCheckWarning, stacklevel=3)
+        if not warning_messages:
+            return
+            
+        full_message = "\n".join(f"- {msg}" for msg in warning_messages)
+        message = f"FrameCheck validation warnings:\n{full_message}"
+        
+        if self._logger:
+            self._logger.warning(message)
+        elif self._show_warnings:
+            warnings.warn(message, FrameCheckWarning, stacklevel=3)
     
     def _emit_errors(self, error_messages: List[str]):
         """
-        Emit validation errors as warnings if self._show_warnings is True.
+        Emit validation errors using logger or warning system.
     
         Parameters
         ----------
         error_messages : list of str
-            Error messages to emit as a formatted multi-line warning.
+            Error messages to emit.
         """
-        if self._show_warnings and error_messages:
-            full_message = "\n".join(f"- {msg}" for msg in error_messages)
-            warnings.warn(f"FrameCheck validation errors:\n{full_message}", FrameCheckWarning, stacklevel=3)
+        if not error_messages:
+            return
+            
+        full_message = "\n".join(f"- {msg}" for msg in error_messages)
+        message = f"FrameCheck validation errors:\n{full_message}"
+        
+        if self._logger:
+            self._logger.error(message)
+        elif self._show_warnings:
+            warnings.warn(message, FrameCheckWarning, stacklevel=3)
 
     def empty(self) -> 'FrameCheck':
         """
@@ -681,7 +703,7 @@ class FrameCheck:
                     warnings_list.extend(result["messages"])
                 failing_indices.update(result["failing_indices"])
 
-        # Emit to user
+        # Emit warnings to logger or warnings system
         self._emit_warnings(warnings_list)
         
         result = ValidationResult(errors=errors, warnings=warnings_list, failing_row_indices=failing_indices)
@@ -690,6 +712,7 @@ class FrameCheck:
         if self._raise_on_error and errors:
             raise ValueError("FrameCheck validation failed:\n" + "\n".join(errors))
         else:
+            # Emit errors to logger or warnings system
             self._emit_errors(errors)
         return result
     
