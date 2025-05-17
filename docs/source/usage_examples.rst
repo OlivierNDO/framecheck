@@ -570,7 +570,59 @@ Pydantic (manual row iteration)
 
 ---
 
-Conclusion
-----------
+Logger Integration
+-----------------
 
-FrameCheck achieves the same validations as Pandera and Pydantic with far less code and clearer intent. It also surfaces failing rows, warnings, and errors without additional plumbing.
+Using a Custom Logger
+^^^^^^^^^^^^^^^^^^^^
+
+.. code-block:: python
+
+   import logging
+   import pandas as pd
+   from framecheck import FrameCheck
+
+   # Set up a logger
+   logger = logging.getLogger("data_validation")
+   logger.setLevel(logging.INFO)
+   handler = logging.StreamHandler()
+   formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+   handler.setFormatter(formatter)
+   logger.addHandler(handler)
+
+   df = pd.DataFrame({
+       'age': [25, 18, 85],
+       'score': [32, 50, 75]
+   })
+
+   # Create validator with logger
+   validator = FrameCheck(logger=logger)
+   validator.column('age', type='int', max=50)  # Will fail on 85
+   validator.column('score', type='int', min=40, warn_only=True)  # Will warn on 32
+   
+   result = validator.validate(df)
+
+   # Output will be sent to the logger instead of using warnings
+   # ERROR - FrameCheck validation errors:
+   # - Column 'age' has values greater than 50.
+   # WARNING - FrameCheck validation warnings:
+   # - Column 'score' has values less than 40.
+
+Logger Integration with Existing Systems
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. code-block:: python
+
+   # Integration with a Flask app
+   from flask import current_app
+   from framecheck import FrameCheck
+   
+   def validate_user_data(df):
+       """Validate user data with Flask's logger."""
+       validator = (
+           FrameCheck(logger=current_app.logger)
+           .column('user_id', type='int', min=1)
+           .column('email', type='string', regex=r'.+@.+\..+')
+           .not_null()
+       )
+       return validator.validate(df)

@@ -254,18 +254,41 @@ class FrameCheck:
     """
     A chainable interface for validating pandas DataFrames using both column-level
     and DataFrame-level checks.
-
+    
     This class allows declarative construction of validation logic, with support for
     warnings, hard failures, and flexible rule definitions.
-
+    
     Parameters
     ----------
     log_errors : bool, optional
         Whether to emit validation errors and warnings as runtime warnings.
+        Default is True.
     logger : logging.Logger, optional
         A logger instance to use for validation messages. If provided, 
         validation errors and warnings will be sent to the logger instead
-        of using the warnings module.
+        of using the warnings module. Default is None.
+    
+    Examples
+    --------
+    >>> import pandas as pd
+    >>> from framecheck import FrameCheck
+    >>> df = pd.DataFrame({'age': [25, -1]})
+    >>> validator = FrameCheck().column('age', type='int', min=0)
+    >>> result = validator.validate(df)
+    >>> print(result.summary())
+    Validation FAILED
+    1 error(s), 0 warning(s)
+    Errors:
+      - Column 'age' has values less than 0.
+    
+    With a custom logger:
+    >>> import logging
+    >>> logger = logging.getLogger("data_validation")
+    >>> # Configure logger...
+    >>> validator = FrameCheck(logger=logger)
+    >>> validator.column('age', type='int', min=0)
+    >>> result = validator.validate(df)
+    # Log output: "ERROR - Column 'age' has values less than 0."
     """
     def __init__(self, log_errors: bool = True, logger=None):
         self._column_checks = []
