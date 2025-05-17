@@ -672,7 +672,14 @@ class FrameCheck:
         """
         if self._finalized:
             expected_cols = [check.column_name for check in self._column_checks if hasattr(check, 'column_name')]
-            self._dataframe_checks.append(DefinedColumnsOnlyCheck(expected_columns=expected_cols))
+            # Check if a DefinedColumnsOnlyCheck already exists
+            has_defined_cols_check = any(
+                isinstance(check, DefinedColumnsOnlyCheck) 
+                for check in self._dataframe_checks
+            )
+            # Only add if one doesn't exist yet
+            if not has_defined_cols_check:
+                self._dataframe_checks.append(DefinedColumnsOnlyCheck(expected_columns=expected_cols))
 
         errors = []
         warnings_list = []
@@ -805,5 +812,16 @@ class FrameCheck:
         """
         return FrameCheckPersistence.load(filepath, cls)
     
+    def info(self) -> dict:
+        """
+        Return a dictionary representation of all validation rules.
+        
+        Returns
+        -------
+        dict
+            Dictionary containing all column and DataFrame-level validations.
+        """
+        return self.to_dict()
+        
     
     

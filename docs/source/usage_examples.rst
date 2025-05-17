@@ -568,9 +568,90 @@ Pydantic (manual row iteration)
     user_id
       user_id must be positive (type=value_error)
 
----
 
-Conclusion
-----------
+Serialization and Persistence
+----------------------------
 
-FrameCheck achieves the same validations as Pandera and Pydantic with far less code and clearer intent. It also surfaces failing rows, warnings, and errors without additional plumbing.
+Saving/Loading Schemas
+^^^^^^^^^^^^^^^^^^^^^
+
+.. code-block:: python
+
+   import pandas as pd
+   from framecheck import FrameCheck, register_check_function
+   
+   # Create a validator
+   validator = (
+      FrameCheck()
+      .column('user_id', type='string', regex=r'^U\d+$')
+      .column('age', type='int', min=18)
+      .not_null()
+   )
+   
+   # Save to a file
+   validator.save('user_schema.json')
+   
+   # Later, load it back
+   loaded_validator = FrameCheck.load('user_schema.json')
+   result = loaded_validator.validate(df)
+
+to_dict() and from_dict()
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. code-block:: python
+
+   # Convert to a dictionary representation
+   schema_dict = validator.to_dict()
+   print(schema_dict)  # Dictionary with all check information
+   
+   # Create a validator from a dictionary
+   restored = FrameCheck.from_dict(schema_dict)
+   result = restored.validate(df)
+
+to_json() and from_json()
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. code-block:: python
+
+   # Convert to a JSON string
+   schema_json = validator.to_json()
+   print(schema_json)  # JSON string with all check information
+   
+   # Create a validator from JSON
+   restored = FrameCheck.from_json(schema_json)
+   result = restored.validate(df)
+
+info()
+^^^^^
+
+.. code-block:: python
+
+   # Get a dictionary with all checks
+   details = validator.info()
+   print(f"Number of column checks: {len(details['column_checks'])}")
+   print(f"Number of dataframe checks: {len(details['dataframe_checks'])}")
+
+
+Registered Check Functions
+-------------------------
+
+.. code-block:: python
+
+   from framecheck import FrameCheck, register_check_function
+   
+   # Register a reusable check function
+   @register_check_function(name="custom_age_check")
+   def validate_age_vs_income(row):
+       if row['age'] < 25 and row['income'] > 100000:
+           return False  # Suspicious: very young with very high income
+       return True
+   
+   # Use the registered check by name
+   validator = (
+       FrameCheck()
+       .column('age', type='int')
+       .column('income', type='float')
+       .registered_check('custom_age_check', "Age/income relationship check")
+   )
+   
+   result = validator.validate(df)

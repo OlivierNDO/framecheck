@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="framecheck",
-    version="0.4.4",
+    version="0.5.1",
     packages=find_packages(),
     install_requires=[
         "pandas"

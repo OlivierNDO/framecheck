@@ -237,6 +237,42 @@ class TestGeneralFrameCheckBehavior(unittest.TestCase):
         with self.assertRaises(ValueError):
             FrameCheck().column('x', type='int', equals=5, in_set=[1, 2, 3])
     
+    def test_info_method_returns_serialized_rules(self):
+        """Test that info() returns the validator's serialized configuration."""
+        validator = (
+            FrameCheck()
+            .column('name', type='string', regex=r'^[A-Z]')
+            .column('age', type='int', min=18, not_null=True)
+            .not_empty()
+        )
+        
+        # Get info representation
+        info = validator.info()
+        
+        # Check it's a dictionary with the expected structure
+        self.assertIsInstance(info, dict)
+        self.assertIn('column_checks', info)
+        self.assertIn('dataframe_checks', info)
+        
+        # Verify column checks are present
+        self.assertEqual(len(info['column_checks']), 2)
+        
+        # Check specific rule details are preserved
+        name_check = next(c for c in info['column_checks'] if c['column_name'] == 'name')
+        age_check = next(c for c in info['column_checks'] if c['column_name'] == 'age')
+        
+        self.assertEqual(name_check['type'], 'StringColumnCheck')
+        self.assertEqual(name_check['regex'], r'^[A-Z]')
+        
+        self.assertEqual(age_check['type'], 'IntColumnCheck')
+        self.assertEqual(age_check['min'], 18)
+        self.assertTrue(age_check.get('not_null', False))
+        
+        # Verify DataFrame checks
+        self.assertEqual(len(info['dataframe_checks']), 1)
+        self.assertEqual(info['dataframe_checks'][0]['type'], 'NotEmptyCheck')
+    
+    
     def test_missing_column_with_exists_check(self):
         """Missing column produces friendly message."""
         df = pd.DataFrame({'a': [1]})

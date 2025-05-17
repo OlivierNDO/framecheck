@@ -33,6 +33,7 @@ Custom Checks
 Validation Execution
 --------------------
 .. autofunction:: framecheck.FrameCheck.validate
+.. autofunction:: framecheck.FrameCheck.info
 
 Persistence
 ----------

@@ -4,7 +4,7 @@
 [![CI](https://github.com/OlivierNDO/framecheck/actions/workflows/coverage.yml/badge.svg)](https://github.com/OlivierNDO/framecheck/actions)
 [![codecov](https://codecov.io/gh/OlivierNDO/framecheck/branch/main/graph/badge.svg)](https://codecov.io/gh/OlivierNDO/framecheck)
 [![Documentation Status](https://readthedocs.org/projects/framecheck/badge/?version=latest)](https://framecheck.readthedocs.io/en/latest/)
-![PyPI](https://img.shields.io/pypi/v/framecheck?cacheBust=1)
+![PyPI](https://img.shields.io/pypi/v/framecheck?cacheBust=3)
 ![Python](https://img.shields.io/badge/Python-3.8--3.12-blue?logo=python&logoColor=white)
 
 

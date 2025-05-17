@@ -13,7 +13,7 @@ from datetime import datetime
 import warnings
 from typing import Dict, Any, Optional, List, Type
 from framecheck.function_registry import is_registered, get_registry_name, get_registered_function
-from framecheck.dataframe_checks import CustomCheck
+from framecheck.dataframe_checks import CustomCheck, DefinedColumnsOnlyCheck
 
 
 class FrameCheckPersistence:
@@ -60,6 +60,27 @@ class FrameCheckPersistence:
             if check_dict:
                 serialized["dataframe_checks"].append(check_dict)
                 
+        # If finalized, add a DefinedColumnsOnlyCheck to ensure it's serialized
+        if frame_check._finalized:
+            # Check if there's already a DefinedColumnsOnlyCheck
+            has_defined_cols_check = any(
+                isinstance(check, DefinedColumnsOnlyCheck) 
+                for check in frame_check._dataframe_checks
+            )
+            
+            # Only add if one doesn't exist yet
+            if not has_defined_cols_check:
+                # Get column names from column checks
+                expected_columns = [check.column_name for check in frame_check._column_checks 
+                                    if hasattr(check, 'column_name')]
+                
+                # Create a dummy check just for serialization
+                defined_cols_check = DefinedColumnsOnlyCheck(expected_columns=expected_columns)
+                
+                # Serialize it and add to dataframe_checks
+                check_dict = FrameCheckPersistence._serialize_check(defined_cols_check)
+                if check_dict:
+                    serialized["dataframe_checks"].append(check_dict)
         return serialized
     
     @staticmethod
@@ -88,6 +109,10 @@ class FrameCheckPersistence:
         # Add check-specific attributes
         if hasattr(check, "column_name"):
             serialized["column_name"] = check.column_name
+            
+        # Add not_null for column checks
+        if hasattr(check, "not_null"):
+            serialized["not_null"] = check.not_null
         
         # Get specialized serialization for the specific check type
         if check_type == "StringColumnCheck":
@@ -301,37 +326,35 @@ class FrameCheckPersistence:
         for col_check in data.get("column_checks", []):
             FrameCheckPersistence._reconstruct_column_check(check, col_check)
             
+        # Find all DefinedColumnsOnlyCheck instances from the original data
+        defined_col_checks = [
+            df_check for df_check in data.get("dataframe_checks", [])
+            if df_check.get("type") == "DefinedColumnsOnlyCheck"
+        ] 
+        
         # Reconstruct dataframe checks, filtering out DefinedColumnsOnlyCheck    
         for df_check in data.get("dataframe_checks", []):
-            # Skip DefinedColumnsOnlyCheck - we'll handle this based on the finalized flag
+            # Skip DefinedColumnsOnlyCheck - we'll handle this later
             if df_check.get("type") != "DefinedColumnsOnlyCheck":
                 FrameCheckPersistence._reconstruct_dataframe_check(check, df_check)
         
         # Handle finalization flag and DefinedColumnsOnlyCheck
         if settings.get("finalized", False):
-            # First set the finalized flag
+            # Set the finalized flag
             check._finalized = True
             
-            # Find DefinedColumnsOnlyCheck instances from the original data
-            defined_col_checks = [
-                df_check for df_check in data.get("dataframe_checks", [])
-                if df_check.get("type") == "DefinedColumnsOnlyCheck"
-            ]
-            
-            # Add DefinedColumnsOnlyCheck instances based on original data
-            from framecheck.dataframe_checks import DefinedColumnsOnlyCheck
-            
-            # If there were any DefinedColumnsOnlyCheck instances, add them back
+            # If there were any DefinedColumnsOnlyCheck instances, add exactly one back
             if defined_col_checks:
-                for dc_check in defined_col_checks:
-                    expected_columns = dc_check.get("expected_columns", [])
-                    raise_on_fail = dc_check.get("raise_on_fail", True)
-                    check._dataframe_checks.append(
-                        DefinedColumnsOnlyCheck(
-                            expected_columns=expected_columns,
-                            raise_on_fail=raise_on_fail
-                        )
+                # Use the first one found
+                dc_check = defined_col_checks[0]
+                expected_columns = dc_check.get("expected_columns", [])
+                raise_on_fail = dc_check.get("raise_on_fail", True)
+                check._dataframe_checks.append(
+                    DefinedColumnsOnlyCheck(
+                        expected_columns=expected_columns,
+                        raise_on_fail=raise_on_fail
                     )
+                )
         
         return check
         
@@ -355,6 +378,10 @@ class FrameCheckPersistence:
         column_name = check_data.get("column_name")
         if not column_name:
             return
+        
+        # Common parameters for all column checks
+        not_null = check_data.get("not_null", False)
+        warn_only = not check_data.get("raise_on_fail", True)
             
         # Handle by check type
         if check_type == "StringColumnCheck":
@@ -369,7 +396,8 @@ class FrameCheckPersistence:
             if "equals" in check_data:
                 kwargs["equals"] = check_data["equals"]
                 
-            kwargs["warn_only"] = not check_data.get("raise_on_fail", True)
+            kwargs["warn_only"] = warn_only
+            kwargs["not_null"] = not_null
             frame_check.column(column_name, type="string", **kwargs)
             
         elif check_type in ["IntColumnCheck", "FloatColumnCheck"]:
@@ -387,7 +415,8 @@ class FrameCheckPersistence:
             if "equals" in check_data:
                 kwargs["equals"] = check_data["equals"]
                 
-            kwargs["warn_only"] = not check_data.get("raise_on_fail", True)
+            kwargs["warn_only"] = warn_only
+            kwargs["not_null"] = not_null
             frame_check.column(column_name, type=col_type, **kwargs)
             
         elif check_type == "DatetimeColumnCheck":
@@ -405,7 +434,8 @@ class FrameCheckPersistence:
             if "format" in check_data:
                 kwargs["format"] = check_data["format"]
                 
-            kwargs["warn_only"] = not check_data.get("raise_on_fail", True)
+            kwargs["warn_only"] = warn_only
+            kwargs["not_null"] = not_null
             frame_check.column(column_name, type="datetime", **kwargs)
             
         elif check_type == "BoolColumnCheck":
@@ -413,13 +443,17 @@ class FrameCheckPersistence:
             if "equals" in check_data:
                 kwargs["equals"] = check_data["equals"]
                 
-            kwargs["warn_only"] = not check_data.get("raise_on_fail", True)
+            kwargs["warn_only"] = warn_only
+            kwargs["not_null"] = not_null
             frame_check.column(column_name, type="bool", **kwargs)
             
         elif check_type == "ColumnExistsCheck":
-            kwargs = {"warn_only": not check_data.get("raise_on_fail", True)}
+            kwargs = {
+                "warn_only": warn_only,
+                "not_null": not_null
+            }
             frame_check.column(column_name, **kwargs)
-    
+        
     @staticmethod
     def _reconstruct_dataframe_check(frame_check, check_data: dict) -> None:
         """
@@ -479,10 +513,6 @@ class FrameCheckPersistence:
                     warn_only=warn_only
                 )
                 
-        elif check_type == "DefinedColumnsOnlyCheck":
-            frame_check._finalized = True
-                
-        # In _reconstruct_dataframe_check method for CustomCheck:
         elif check_type == "CustomCheck":
             description = check_data.get("description", "Custom check")
             registry_name = check_data.get("registry_name")
